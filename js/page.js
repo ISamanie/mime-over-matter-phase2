@@ -13,13 +13,12 @@ const PAGE_GAP = 24;
 // Where panel i sits on the page, in canvas coordinates.
 function pageSlot(i) {
   const { w, h } = CONFIG.panel;
-  const rows = Math.ceil(PANELS.length / PAGE_COLUMNS);
-  // Fit the interim roster's extra introduction panels on the page too.
-  const sw = Math.min(270, (CONFIG.canvas.height - 150 - (rows - 1) * PAGE_GAP) / rows * w / h);
+  const rows = 2;
+  const sw = 270;
   const sh = (sw * h) / w;
   const left = (CONFIG.canvas.width - (PAGE_COLUMNS * sw + (PAGE_COLUMNS - 1) * PAGE_GAP)) / 2;
   const top = (CONFIG.canvas.height - (rows * sh + (rows - 1) * PAGE_GAP)) / 2 + 30;
-  const col = i % PAGE_COLUMNS, row = Math.floor(i / PAGE_COLUMNS);
+  const col = i % PAGE_COLUMNS, row = Math.floor((i % 6) / PAGE_COLUMNS);
   return { x: left + col * (sw + PAGE_GAP), y: top + row * (sh + PAGE_GAP), w: sw, h: sh };
 }
 
@@ -30,6 +29,8 @@ function panelSetPicture(panel, index) {
   panel._set ||= offscreen(w, h, g => {
     drawPanelBackground(g, panel, index);
     drawSurfaces(g, panel.platforms);
+    drawObstacles(g,panel.walls);
+    for (const h of panel.hazards || []) new Hazard(h,[]).render(g);
     if (panel.theEnd) drawTheEnd(g);
   });
   return panel._set;
@@ -39,9 +40,10 @@ function panelSetPicture(panel, index) {
 // been there, or as an empty set if not. `arrow` (0 to 1) is how much of
 // the reading arrow from panel `from` to panel `to` is drawn, and
 // `arrowAlpha` fades it.
-function drawComicPage(ctx, pictures, from, to, arrow, arrowAlpha = 1) {
-  outlinedText(ctx, 'BIG TOP BRAWL  ·  PAGE 1', CONFIG.canvas.width / 2, pageSlot(0).y - 46, 40, '#e53935', { stroke: 7 });
-  PANELS.forEach((panel, i) => {
+function drawComicPage(ctx, pictures, from, to, arrow, arrowAlpha = 1, page = Math.floor(to/6)) {
+  outlinedText(ctx, `BIG TOP BRAWL  ·  PAGE ${page+1}`, CONFIG.canvas.width / 2, pageSlot(0).y - 46, 40, '#e53935', { stroke: 7 });
+  PANELS.slice(page*6,page*6+6).forEach((panel, local) => {
+    const i=page*6+local;
     const r = pageSlot(i);
     ctx.drawImage(pictures[i] || panelSetPicture(panel, i), r.x, r.y, r.w, r.h);
     if (i > to) {                       // not reached yet: faded
@@ -56,7 +58,7 @@ function drawComicPage(ctx, pictures, from, to, arrow, arrowAlpha = 1) {
     inkLine(ctx, r.x + r.w, r.y + r.h, r.x, r.y + r.h, b * 1.2, rand);
     inkLine(ctx, r.x, r.y + r.h, r.x, r.y, b, rand);
   });
-  if (arrow > 0 && arrowAlpha > 0) {
+  if (arrow > 0 && arrowAlpha > 0 && Math.floor(from/6)===Math.floor(to/6)) {
     ctx.save();
     ctx.globalAlpha = arrowAlpha;
     drawReadingArrow(ctx, pageSlot(from), pageSlot(to), arrow);
@@ -126,7 +128,13 @@ function drawPageTurn(ctx, turn, pictures) {
   ctx.save();
   ctx.translate((P.x - r.x * k) * zoom, (P.y - r.y * k) * zoom);
   ctx.scale(1 + (k - 1) * zoom, 1 + (k - 1) * zoom);
-  drawComicPage(ctx, pictures, turn.from, turn.to, arrow, slot === turn.to ? 1 - zoom * 2 : 1);
+  const fromPage=Math.floor(turn.from/6),toPage=Math.floor(turn.to/6);
+  if (fromPage!==toPage && turn.t>=c.zoomOut && turn.t<c.zoomOut+c.hold) {
+    const blend=smooth((turn.t-c.zoomOut)/c.hold);
+    drawComicPage(ctx,pictures,turn.from,turn.to,0,0,fromPage);
+    ctx.save();ctx.globalAlpha=blend;drawPaper(ctx);
+    drawComicPage(ctx,pictures,turn.from,turn.to,0,0,toPage);ctx.restore();
+  } else drawComicPage(ctx, pictures, turn.from, turn.to, arrow, slot === turn.to ? 1 - zoom * 2 : 1, Math.floor(slot/6));
   ctx.restore();
   return zoom;
 }

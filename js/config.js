@@ -3,7 +3,7 @@
 // are measured from the panel's top-left corner.
 const CONFIG = {
   canvas: { width: 960, height: 640 },
-  panel: { x: 30, y: 72, w: 900, h: 540, border: 9 },
+  panel: { x: 30, y: 86, w: 900, h: 540, border: 9 },
   groundY: 470,            // top of the floor, in panel coordinates
   gravity: 2000,
   gateWidth: 22,           // the ink line blocking the right edge
@@ -24,6 +24,8 @@ const CONFIG = {
     knockbackX: 300,
     knockbackY: 320,
     knockbackLock: 0.25,   // no control for this long after a hit
+    comboWindow: 0.85, finisherDamage: 2, finisherPush: 75,
+    kickDamage: 2, kickRange: 65,
   },
   clowns: {
     unicyclist: { w: 50, h: 150, health: 2, speed: 150, contactDamage: 1 },
@@ -47,6 +49,21 @@ const CONFIG = {
   seltzer: { duration: 0.45, push: 440, lift: 90, w: 145, h: 48 },
   pin: { speed: 390, damage: 1, w: 28, h: 18, life: 3 },
   balloonDog: { w: 46, h: 42, speed: 135, damage: 1, life: 9 },
+  combat: { freeze: 0.045, finisherFreeze: 0.08, shake: 0.22, shakePixels: 6 },
+  hazards: { slipTime: 0.7, slipSpeed: 410, trapPeriod: 3.5, trapOpen: 1.2, conveyorSpeed: 100 },
+  knives: { count: 5, speed: 650, damage: 2, cooldown: 0.3 },
+  balloonSword: { damage: 0.5, range: 78, cooldown: 0.14, swings: 8 },
+  pogo: { duration: 16, jumpSpeed: 1080, damage: 2, bounceSpeed: 720 },
+  slinky: { count: 3, speed: 150, damage: 2, life: 12 },
+  invisibleDog: { duration: 18, speed: 210, range: 230, damage: 1, biteEvery: 1.1 },
+  mime: {
+    poseDuration: 0.75,
+    wall: { cooldown: 7, duration: 2.8, w: 22, h: 150 },
+    rope: { cooldown: 5, range: 330, pull: 170 },
+    box: { cooldown: 9, range: 240, duration: 3 },
+  },
+  helper: { chance: 1 / 3, minDelay: 4, maxDelay: 10 },
+  handHit: { recover: 1.1, returnAfter: 1.6 },
   pie: {
     w: 30, h: 14,
     damage: 1,

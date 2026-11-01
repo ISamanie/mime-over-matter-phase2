@@ -23,7 +23,7 @@ const get = code => vm.runInContext(code, sandbox);
 const check = (name, code) => { assert.ok(get(code), name); console.log(`ok    ${name}`); };
 get(`
   function arena(type, x = 600) {
-    Game.restart();
+    Game.restart(); CONFIG.helper.chance = 0;
     Game.rightHand.reset(); Game.leftHand.reset();
     Game.panel = { platforms: [], clowns: [{type, x}] };
     Game.surfaces = surfacesOf(Game.panel);
@@ -161,6 +161,7 @@ get(`Game.restart(); Game.pierre.hurt = () => false;
       }
     }
     if (!Game.gateOpen) throw new Error('Gate stuck on panel ' + Game.panelIndex);
+    Game.freeze = 0;
     Game.pierre.x = CONFIG.panel.w + Game.pierre.w;
     Game.update(1/60); tick(2); cleared++;
   }

@@ -37,9 +37,10 @@ function outlinedText(ctx, text, x, y, size, fill, opts = {}) {
   ctx.textAlign = opts.align || 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = opts.stroke ?? Math.max(3, size / 7);
+  const stroke = opts.stroke ?? Math.max(3, size / 7);
+  if (stroke > 0) ctx.lineWidth = stroke;
   ctx.strokeStyle = INK;
-  if (ctx.lineWidth > 0) ctx.strokeText(text, x, y);
+  if (stroke > 0) ctx.strokeText(text, x, y);
   ctx.fillStyle = fill;
   ctx.fillText(text, x, y);
   ctx.restore();
@@ -97,7 +98,11 @@ const BOOTHS = ['FACE PAINT', 'BALLOON ART', 'SQUEAK SHOP', 'PIE BAR', 'HONK HUT
 
 function drawPanelBackground(ctx, panel, index) {
   const { w, h } = CONFIG.panel;
-  panel._backdrop ||= offscreen(w, h, g => paintConventionHall(g, index));
+  panel._backdrop ||= offscreen(w, h, g => {
+    if(panel.setting==='backstage') paintBackstage(g,index);
+    else if(panel.setting==='bigTop') paintBigTop(g,index);
+    else paintConventionHall(g,index);
+  });
   ctx.drawImage(panel._backdrop, 0, 0, w, h);
 }
 
@@ -414,10 +419,11 @@ function drawGameOver(ctx) {
 }
 
 // The last panel: "THE END" across the panel.
-function drawTheEnd(ctx) {
+function drawTheEnd(ctx, progress = 1) {
   const { w } = CONFIG.panel;
-  outlinedText(ctx, 'THE END', w / 2, 190, 120, '#e53935', { stroke: 10 });
-  outlinedText(ctx, 'Press R to play again', w / 2, 300, 32, '#fff', { stroke: 6 });
+  const lettering=new EndLettering();
+  drawSketch(ctx,lettering.parts(),lettering.x,lettering.y,1,progress,{lineWidth:8});
+  if (progress>=1) outlinedText(ctx, 'Press R or Enter to play again', w / 2, 300, 32, '#fff', { stroke: 6 });
 }
 
 // --- HUD, in the top gutter ---
@@ -444,12 +450,91 @@ function drawHUD(ctx, game) {
     ctx.lineWidth = 3;
     ctx.strokeRect(x, 24, 22, 26);
   }
-  if (p.hasHammer) {
+  if (p.held) {
     box(450, 14, 250, 44);
-    outlinedText(ctx, `HAMMER: ${p.held.swings} SWINGS`, 575, 37, 22, '#fff', { stroke: 5 });
+    const label=p.held.kind==='pogo'?`POGO: ${Math.ceil(p.held.time)}s`:p.held.kind==='slinky'?`SLINKY: ${p.slinkies}`:
+      `${p.held.kind==='balloonSword'?'BALLOON SWORD':'HAMMER'}: ${p.held.swings}`;
+    outlinedText(ctx, label, 575, 37, 21, '#fff', { stroke: 5 });
   } else {
-    outlinedText(ctx, 'MIME OVER MATTER', CONFIG.canvas.width / 2 + 60, 36, 30, '#e53935', { stroke: 6 });
+    box(450,14,250,44);
+    outlinedText(ctx, 'MIME OVER MATTER',575,37,25,'#e53935',{stroke:4});
   }
-  box(CONFIG.canvas.width - 196, 14, 170, 44);
-  outlinedText(ctx, `PANEL ${game.panelIndex + 1} / ${PANELS.length}`, CONFIG.canvas.width - 111, 37, 24, '#fff', { stroke: 5 });
+  box(720, 14, 214, 44);
+  outlinedText(ctx, `PAGE ${Math.floor(game.panelIndex/6)+1} · PANEL ${game.panelIndex%6+1} / 6`, 827, 37, 18, '#fff', { stroke: 4 });
+  const ready=kind=>game.mime.cooldowns[kind]>0?`${Math.ceil(game.mime.cooldowns[kind])}s`:'READY';
+  ctx.fillStyle=PAPER;ctx.fillRect(26,59,908,21);
+  outlinedText(ctx,`K KNIVES: ${p.knives}    L WALL: ${ready('wall')}    U ROPE: ${ready('rope')}    I BOX: ${ready('box')}    P PAUSE    M ${Sound.enabled?'SOUND ON':'MUTED'}`,
+    480,70,14,INK,{stroke:0,font:COMIC_FONT});
+}
+
+function paintBackstage(g,index) {
+  const {w,h}=CONFIG.panel,floor=CONFIG.groundY;
+  g.fillStyle='#c6bdd0';g.fillRect(0,0,w,h);
+  for(let x=10;x<w;x+=90) {g.fillStyle=x%180?'#736982':'#9686a3';g.fillRect(x,0,45,floor);}
+  g.strokeStyle=INK;g.lineWidth=5;
+  for(let i=0;i<3;i++) {
+    const x=90+i*285;
+    g.fillStyle='#6b4541';g.fillRect(x,190,150,280);g.strokeRect(x,190,150,280);
+    g.fillStyle='#fff59d';g.fillRect(x-5,160,160,32);
+    outlinedText(g,['DRESSING ROOM','PROPS','NO HONKING'][(i+index)%3],x+75,177,18,INK,{stroke:0,font:COMIC_FONT});
+    g.fillStyle='#ffd600';g.beginPath();g.arc(x+130,335,6,0,Math.PI*2);g.fill();
+  }
+  for(let x=50;x<w;x+=190) {g.beginPath();g.moveTo(x,0);g.lineTo(x+30,150);g.stroke();g.fillStyle='#424242';g.fillRect(x+10,130,55,25);}
+  g.fillStyle='rgba(239,227,196,0.44)';g.fillRect(0,0,w,floor);
+  g.fillStyle='#8b6953';g.fillRect(0,floor,w,h-floor);
+  for(let y=floor;y<h;y+=22) {g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke();}
+}
+
+function paintBigTop(g,index) {
+  const {w,h}=CONFIG.panel,floor=CONFIG.groundY;
+  g.fillStyle='#f4dda8';g.fillRect(0,0,w,h);
+  for(let x=-100;x<w;x+=180) {
+    g.fillStyle='#d35454';g.beginPath();g.moveTo(w/2,-40);g.lineTo(x,floor);g.lineTo(x+90,floor);g.closePath();g.fill();
+  }
+  g.strokeStyle='#473b48';g.lineWidth=4;
+  for(let row=0;row<3;row++) {
+    const y=330+row*42;
+    g.fillStyle='#9b7560';g.fillRect(20,y,w-40,32);g.strokeRect(20,y,w-40,32);
+    for(let x=45;x<w;x+=42) {g.fillStyle=['#685e82','#88748c','#7b8297'][(row+index)%3];g.beginPath();g.arc(x,y-6,11,0,Math.PI*2);g.fill();}
+  }
+  for(const x of [210,650]) {g.beginPath();g.moveTo(x,0);g.lineTo(x,180);g.moveTo(x+85,0);g.lineTo(x+85,180);g.moveTo(x,180);g.lineTo(x+85,180);g.stroke();}
+  g.fillStyle='rgba(239,227,196,0.42)';g.fillRect(0,0,w,floor);
+  g.fillStyle='#d3a55f';g.fillRect(0,floor,w,h-floor);
+  g.strokeStyle='#e53935';g.lineWidth=12;g.beginPath();g.ellipse(w/2,floor+40,360,40,0,0,Math.PI*2);g.stroke();
+}
+
+function drawTitle(ctx) {
+  const {width:w,height:h}=CONFIG.canvas;
+  ctx.fillStyle='#ffe873';ctx.fillRect(42,35,w-84,h-70);
+  ctx.lineWidth=10;ctx.strokeStyle=INK;ctx.strokeRect(42,35,w-84,h-70);
+  outlinedText(ctx,'MIME OVER MATTER',w/2,108,76,'#e53935',{stroke:9});
+  const lines=[
+    ['Chuckles McGraw draws BIG TOP BRAWL.','His clowns are losing their audience.'],
+    ["Across the aisle, Pierre's silent mime act steals the show.",'Jealous, Chuckles traps him inside the comic!'],
+    ['The right hand draws clowns to stop Pierre.','The rebellious left hand secretly draws supplies.'],
+    ['Fight across three pages. Reach THE END.','Escape without saying a word.'],
+  ];
+  lines.forEach((pair,i)=>{
+    const y=170+i*78;
+    ctx.fillStyle=i%2?'#fffaf0':'#f7e1a1';ctx.fillRect(80,y,w-160,65);ctx.lineWidth=3;ctx.strokeRect(80,y,w-160,65);
+    pair.forEach((line,j)=>outlinedText(ctx,line,w/2,y+20+j*25,21,INK,{stroke:0,font:COMIC_FONT}));
+  });
+  outlinedText(ctx,'PRESS ENTER TO START',w/2,533,36,'#e53935',{stroke:3});
+  outlinedText(ctx,'ARROWS / A D: WALK · SPACE: JUMP · J: ATTACK · K: KNIFE',w/2,577,18,INK,{stroke:0,font:COMIC_FONT});
+}
+
+function drawPause(ctx) {
+  ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(0,0,CONFIG.canvas.width,CONFIG.canvas.height);
+  outlinedText(ctx,'PAUSED',480,285,90,'#ffe873');
+  outlinedText(ctx,'P to resume',480,370,30,'#fff');
+}
+
+class EndLettering {
+  constructor() {this.x=120;this.y=125;this.facing=1;this.active=false;this.drawProgress=0;}
+  parts() {
+    const glyphs={T:[[[0,0],[75,0]],[[37,0],[37,95]]],H:[[[0,0],[0,95]],[[75,0],[75,95]],[[0,45],[75,45]]],
+      E:[[[75,0],[0,0],[0,95],[75,95]],[[0,45],[60,45]]],N:[[[0,95],[0,0],[75,95],[75,0]]],
+      D:[[[0,95],[0,0],[40,0],[75,25],[75,70],[40,95],[0,95]]]};
+    return [...'THE END'].flatMap((letter,i)=>(glyphs[letter]||[]).map(pts=>({shape:'line',pts:pts.map(([x,y])=>[x+i*97,y]),lw:10})));
+  }
 }

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>Clown acceptance playtest — Mime Over Matter</title>
+<title>Acceptance playtest — Mime Over Matter</title>
 <style>
   body { margin: 0; background: #272421; color: #fff2cb; font: 16px system-ui; text-align: center; }
   nav { padding: 12px; }
@@ -18,9 +18,20 @@
   <button id="clear">Clear panel</button>
   <button id="restart">Restart game</button>
   <button id="step">Advance 1 second</button>
+  <select id="panel" aria-label="Panel to preview"></select>
+  <button id="load">Load panel</button>
+  <button id="turn">Preview page turn</button>
+  <button id="walk">Walk right 1 second</button>
+  <button id="jump">Jump right</button>
+  <button id="attack">Three quick attacks</button>
+  <button data-key="k">Throw knife</button>
+  <button data-key="l">Invisible Wall</button>
+  <button data-key="u">Invisible Rope</button>
+  <button data-key="i">Invisible Box</button>
+  <button id="supplies">Test supplies</button>
   <label><input id="practice" type="checkbox" checked>Practice: no damage</label>
 </nav>
-<p>Arrows / A / D: walk · Space: jump · J: beret slap. Click a type to play its solo introduction.</p>
+<p>Arrows / A / D: walk · Space: jump · J: attack · K: knife · L / U / I: mime powers · P: pause · M: mute.</p>
 <p id="status" aria-live="polite"></p>
 <canvas id="game" width="960" height="640" tabindex="0" aria-label="Clown playtest"></canvas>
 <script src="../js/config.js"></script>
@@ -33,11 +44,28 @@
 <script src="../js/clowns.js"></script>
 <script src="../js/items.js"></script>
 <script src="../js/hands.js"></script>
+<script src="../js/world.js"></script>
+<script src="../js/mime.js"></script>
+<script src="../js/extras.js"></script>
 <script src="../js/main.js"></script>
 <script>
   const practice = document.getElementById('practice');
+  const panelSelect=document.getElementById('panel');
+  PANELS.forEach((p,i)=>{
+    const option=document.createElement('option');option.value=i;
+    option.textContent=`${i+1}: ${p.setting}${p.theEnd?' — THE END':p.traversal?' — traversal':''}`;
+    panelSelect.appendChild(option);
+  });
+  function advance(seconds) {
+    for(let i=0;i<Math.ceil(seconds*60);i++) {Game.update(1/60);Input.endFrame();}
+    Game.render();showStatus();focusGame();
+  }
+  function simulate(keys,seconds) {
+    keys.forEach(k=>{Input.down.add(k);Input.pressed.add(k);});
+    advance(seconds);keys.forEach(k=>Input.down.delete(k));
+  }
   function showStatus() {
-    document.getElementById('status').textContent = `Panel ${Game.panelIndex + 1}: ${Game.state}; hand ${Game.rightHand.state}; clowns ${Game.clowns.length}; props ${Game.props.length}`;
+    document.getElementById('status').textContent = `Panel ${Game.panelIndex + 1}: ${Game.state}; hand ${Game.rightHand.state}; clowns ${Game.clowns.length}; props ${Game.props.length}; x ${Math.round(Game.pierre.x)}; knives ${Game.pierre.knives}; audio ${Sound.ctx ? Sound.ctx.state : 'not started'}`;
   }
   function setPractice() {
     if (practice.checked) Game.pierre.hurt = () => false;
@@ -56,10 +84,14 @@
     focusGame();
   };
   document.getElementById('restart').onclick = () => { Game.restart(); setPractice(); focusGame(); };
-  document.getElementById('step').onclick = () => {
-    for (let i = 0; i < 60; i++) Game.update(1 / 60);
-    Game.render(); showStatus(); focusGame();
-  };
+  document.getElementById('step').onclick = () => advance(1);
+  document.getElementById('load').onclick = () => {Game.restart();Game.loadPanel(Number(panelSelect.value));setPractice();Game.render();showStatus();focusGame();};
+  document.getElementById('turn').onclick = () => {if(Game.panelIndex<17){Game.nextPanel();Game.render();showStatus();}};
+  document.getElementById('walk').onclick = () => simulate(['ArrowRight'],1);
+  document.getElementById('jump').onclick = () => simulate(['ArrowRight',' '],0.7);
+  document.getElementById('attack').onclick = () => {for(let i=0;i<3;i++)simulate(['j'],0.08);advance(0.8);};
+  document.getElementById('supplies').onclick = () => {Game.pierre.knives+=5;new Hammer(0,0).pickUp(Game.pierre);showStatus();focusGame();};
+  for(const button of document.querySelectorAll('[data-key]'))button.onclick=()=>simulate([button.dataset.key],0.1);
   practice.onchange = setPractice;
   setPractice();
   showStatus();

@@ -58,13 +58,13 @@ function check(name, ok) {
 }
 
 // Noses only come off when a test asks for it.
-get('CONFIG.clowns.noseChance = 0');
+get('Game.restart(); CONFIG.clowns.noseChance = 0; CONFIG.helper.chance = 0');
 
 // --- Panel data ---
 const panels = get('PANELS');
-check('10 panels including four solo introductions, the last is THE END', panels.length === 10 && panels[9].theEnd);
+check('18 panels including four solo introductions, the last is THE END', panels.length === 18 && panels[17].theEnd);
 const counts = panels.slice(0, -1).map(p => p.clowns.length).join(',');
-check(`clown counts include solo debuts before mixed acts (got ${counts})`, counts === '1,2,1,1,1,1,3,5,4');
+check(`clown counts include solo debuts before mixed acts (got ${counts})`, counts === '1,2,1,1,1,1,3,5,4,0,3,3,3,0,3,4,5');
 check('every fighting panel has at least two heights (criterion 40)',
   panels.slice(0, -1).every(p => p.platforms.length >= 1));
 
@@ -99,7 +99,7 @@ run(2);
 check('the clown is active once drawn', get('Game.clowns[0].active') === true);
 
 // --- Punching ---
-get('Game.pierre.x = Game.clowns[0].x - 45; Game.pierre.facing = 1; Game.pierre.punchCooldown = 0');
+get('Game.pierre.x = Game.clowns[0].x - 45; Game.pierre.facing = 1; Game.pierre.punchCooldown = 0; Game.pierre.invincible = 1; Game.pierre.onGround = true');
 get('Game.pierre.punch(Game)');
 check('the slap has not landed at the start of the swing', get('Game.clowns[0].health') === get('CONFIG.clowns.unicyclist.health'));
 run(0.15);
@@ -164,7 +164,7 @@ get('Game.items[0] && (Game.pierre.x = Game.items[0].x, Game.pierre.y = Game.ite
 run(1 / 60);
 check('touching the hammer picks it up with 10 swings', get('Game.pierre.hasHammer && Game.pierre.held.swings === 10'));
 run(3);
-get('const c = Game.clowns.find(c => c.active && c.type === "pieTosser"); Game.pierre.x = c.x - 70; Game.pierre.y = c.y; Game.pierre.facing = 1; Game.pierre.punchCooldown = 0; Game.effects = []; Game.pierre.punch(Game)');
+get('const c = Game.clowns.find(c => c.active && c.type === "pieTosser"); Game.pierre.x = c.x - 70; Game.pierre.y = c.y; Game.pierre.onGround = true; Game.pierre.facing = 1; Game.pierre.punchCooldown = 0; Game.effects = []; Game.pierre.punch(Game)');
 run(0.15);
 check('a hammer hit does 3 damage and shows SQUEAK!',
   get('Game.clowns.some(c => c.type === "pieTosser" && c.health === 1)') && get('Game.effects.some(e => e.text === "SQUEAK!")'));
@@ -184,6 +184,7 @@ check('R restarts at panel 1 with full health and no items',
 get('Game.loadPanel(PANELS.length - 2); Game.pierre.hurt = () => false');
 run(14);
 get('Game.clowns.forEach(c => c.hurt(99, 0, Game))');
+get('Game.pierre.x = 830');
 key('keydown', 'ArrowRight'); run(8); key('keyup', 'ArrowRight');
 check('clearing the final fight reaches THE END', get('Game.state') === 'end' && get('Game.panelIndex') === panels.length - 1);
 

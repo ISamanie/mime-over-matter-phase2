@@ -21,9 +21,11 @@ const KEYS = {
   jump: [' ', 'w', 'ArrowUp'],
   attack: ['j'],
   restart: ['r', 'Enter'],
+  knife:['k'],pause:['p'],wall:['l'],rope:['u'],box:['i'],mute:['m'],
 };
 const keyName = e => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
 addEventListener('keydown', e => {
+  Sound.unlock();
   const k = keyName(e);
   if (!Input.down.has(k)) Input.pressed.add(k);
   Input.down.add(k);
@@ -31,6 +33,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => Input.down.delete(keyName(e)));
 addEventListener('blur', () => Input.down.clear());
+addEventListener('pointerdown',()=>Sound.unlock());
 
 const Game = {
   state: 'play',   // 'play', 'pageTurn', 'gameover' or 'end'
@@ -41,15 +44,27 @@ const Game = {
     this.rightHand = new Hand('right');
     this.leftHand = new Hand('left');
     this.sandwichCooldown = 0;
+    this.mime = new MimePowers();
+    this.dog = null;
     this.pictures = [];   // each panel as Pierre left it, for the page view
     this.state = 'play';
     this.loadPanel(0);
   },
 
   loadPanel(index) {
+    if (this.leftHand && this.leftHand.busy &&
+        ((this.leftHand.current && this.leftHand.current.thing.kind==='sandwich') ||
+          this.leftHand.queue.some(q=>q.thing.kind==='sandwich'))) this.sandwichCooldown=0;
+    this.state = 'play';
     this.panelIndex = index;
     this.panel = PANELS[index];
+    this.isCrowded=!!this.panel.crowded || this.panel.clowns.some(c=>c.type==='clownCar');
     this.surfaces = surfacesOf(this.panel);
+    this.hazards = (this.panel.hazards || []).map(h=>new Hazard(h,this.surfaces));
+    this.mime.wall = this.mime.rope = null;
+    this.friendly = [];
+    this.freeze = this.shake = this.endTime = 0;
+    this.lettering = null;
     this.clowns = [];
     this.items = [];
     this.pies = [];
@@ -59,6 +74,9 @@ const Game = {
     this.defeated = 0;
     this.totalClowns = this.panel.clowns.length;
     this.pierre.placeAtStart();
+    if (this.dog) { this.dog.x=this.pierre.x;this.dog.y=this.pierre.y;this.dog.vy=0; }
+    this.randomHelpIn = !this.panel.theEnd && !this.isCrowded && Math.random()<CONFIG.helper.chance
+      ? CONFIG.helper.minDelay+Math.random()*(CONFIG.helper.maxDelay-CONFIG.helper.minDelay) : null;
 
     // The right hand draws this panel's clowns, one at a time, in order.
     this.leftHand.reset();
@@ -66,13 +84,37 @@ const Game = {
     for (const spec of this.panel.clowns) {
       this.rightHand.draw(makeClown(spec, this.surfaces), clown => this.clowns.push(clown));
     }
+    if (this.panel.theEnd) {
+      this.lettering = new EndLettering();
+      this.rightHand.draw(this.lettering,()=>{});
+      this.state = 'end';
+    }
     // A crowded panel: the left hand draws the hammer at once. It draws
     // faster and starts sooner, so the hammer is ready before the first
     // clown (spec 5.5).
-    if (this.panel.crowded || this.panel.clowns.some(c => c.type === 'clownCar')) {
+    if (this.isCrowded) {
       const spot = this.spotForItem();
-      this.leftHand.draw(new Hammer(spot.x, spot.y), item => this.items.push(item));
+      this.leftHand.draw(makeItem(this.panel.gift || 'hammer',spot.x,spot.y), item => this.items.push(item));
     }
+  },
+
+  solidWalls() { return [...(this.panel.walls || []), ...(this.mime.wall ? [this.mime.wall] : [])]; },
+
+  hitFeel(finisher) {
+    this.freeze=Math.max(this.freeze,finisher?CONFIG.combat.finisherFreeze:CONFIG.combat.freeze);
+    if (finisher) this.shake=CONFIG.combat.shake;
+  },
+
+  randomHelp(dt) {
+    if (this.randomHelpIn === null || this.panel.theEnd) return;
+    this.randomHelpIn-=dt;
+    if (this.randomHelpIn>0 || this.leftHand.busy || this.pierre.health<=CONFIG.sandwich.lowHealth) return;
+    this.randomHelpIn=null;
+    const kinds=['hammer','knives','balloonSword','pogo','slinky','invisibleDog'];
+    const kind=Math.random()<0.65?'sandwich':kinds[Math.floor(Math.random()*kinds.length)];
+    if (kind==='sandwich' && this.items.some(i=>i.kind==='sandwich')) return;
+    const spot=this.spotForItem();
+    this.leftHand.draw(makeItem(kind,spot.x,spot.y),item=>this.items.push(item));
   },
 
   // The left hand's rescue (spec 5.5): when Pierre is low on health, it
@@ -96,7 +138,10 @@ const Game = {
     const right = Math.min(CONFIG.panel.w, this.rightLimit()) - 40;
     const spots = [];
     for (const s of this.surfaces) {
+      if (s.disabled) continue;
       for (let x = Math.max(s.x + 25, 40); x <= Math.min(s.x + s.w - 25, right); x += 30) {
+        if ((this.panel.walls || []).some(w=>x+28>w.x&&x-28<w.x+w.w&&s.y>w.y&&s.y-56<w.y+w.h)) continue;
+        if (this.hazards.some(h=>h.type==='trapdoor'&&Math.abs(h.y-s.y)<2&&x+28>h.x&&x-28<h.x+h.w)) continue;
         spots.push({ x, y: s.y });
       }
     }
@@ -106,11 +151,15 @@ const Game = {
       const fromPierre = Math.hypot(this.pierre.x - spot.x, this.pierre.y - spot.y);
       return fromClowns - 0.35 * fromPierre - (fromPierre < 80 ? 200 : 0);
     };
-    return spots.reduce((best, spot) => (score(spot) > score(best) ? spot : best));
+    return spots.length ? spots.reduce((best, spot) => (score(spot) > score(best) ? spot : best)) : {x:70,y:CONFIG.groundY};
   },
 
   clownDefeated() {
     this.defeated++;
+    if (this.defeated>=this.totalClowns) {
+      this.pies=[];
+      for (const prop of this.props) prop.done=true;
+    }
   },
 
   spawnClown(clown) {
@@ -134,6 +183,7 @@ const Game = {
 
   // A comic impact word ("POW!") at a spot in the panel.
   burst(text, x, y, color = '#e53935') {
+    if (text==='SQUEAK!') Sound.play('squeak');
     this.effects.push({ text, x, y, color, t: 0, tilt: (Math.random() - 0.5) * 0.4, seed: Math.floor(Math.random() * 1e6) });
   },
 
@@ -154,18 +204,40 @@ const Game = {
   },
 
   update(dt) {
-    this.time += dt;
+    if (Input.wasPressed(...KEYS.mute)) Sound.enabled=!Sound.enabled;
+    if (this.state==='title') {
+      if (Input.wasPressed('Enter')) this.restart();
+      return;
+    }
+    if (Input.wasPressed(...KEYS.pause) && ['play','pageTurn','paused'].includes(this.state)) {
+      if (this.state==='paused') this.state=this.beforePause;
+      else {this.beforePause=this.state;this.state='paused';}
+      return;
+    }
+    if (this.state==='paused') return;
     if ((this.state === 'gameover' || this.state === 'end') && Input.wasPressed(...KEYS.restart)) {
       this.restart();
       return;
     }
     if (this.state === 'gameover') return;   // freeze the panel under the stamp
+    this.time += dt;
     if (this.state === 'pageTurn') {
       const c = CONFIG.pageTurn;
       this.turn.t += dt;
       if (this.turn.t >= c.zoomOut + c.hold + c.zoomIn) this.state = this.panel.theEnd ? 'end' : 'play';
       return;
     }
+    if (this.state==='end') {
+      this.endTime+=dt;this.rightHand.update(dt);
+      Sound.update(dt,this.rightHand.state==='drawing');return;
+    }
+    this.shake=Math.max(0,this.shake-dt);
+    if (this.freeze>0) {
+      if (Input.wasPressed(...KEYS.attack) && this.pierre.knockLock<=0) this.pierre.bufferAttack();
+      this.freeze=Math.max(0,this.freeze-dt);return;
+    }
+    this.mime.update(dt);
+    for (const h of this.hazards) h.update(dt);
 
     this.pierre.update(dt, this);
     if (this.pierre.x - this.pierre.w / 2 > CONFIG.panel.w) {
@@ -175,6 +247,7 @@ const Game = {
     this.rightHand.update(dt);
     this.leftHand.update(dt);
     this.helpIfLosing(dt);
+    this.randomHelp(dt);
     for (const i of this.items) if (i.active) i.update(dt, this);
     this.items = this.items.filter(i => !i.taken);
     // Newly released minis begin acting next frame, after their entrance.
@@ -184,24 +257,30 @@ const Game = {
     this.props = this.props.filter(p => !p.done);
     for (const p of this.pies) p.update(dt, this);
     this.pies = this.pies.filter(p => !p.done);
+    for (const f of this.friendly) f.update(dt,this);
+    this.friendly=this.friendly.filter(f=>!f.done);
+    if (this.dog) {this.dog.update(dt,this);if(this.dog.done)this.dog=null;}
     for (const n of this.noses) n.update(dt, this);
     this.noses = this.noses.filter(n => !n.gone);
     for (const e of this.effects) e.t += dt;
     this.effects = this.effects.filter(e => e.t < CONFIG.burstTime);
     if (this.pierre.health <= 0) this.state = 'gameover';
+    Sound.update(dt,this.rightHand.state==='drawing'||this.leftHand.state==='drawing');
   },
 
   render() {
     const { x, y, w, h } = CONFIG.panel;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     drawPaper(ctx);
+    if (this.state==='title') {drawTitle(ctx);return;}
 
-    if (this.state === 'pageTurn') {
+    if (this.state === 'pageTurn' || (this.state==='paused' && this.beforePause==='pageTurn')) {
       const zoom = drawPageTurn(ctx, this.turn, this.pictures);
       ctx.save();
       ctx.globalAlpha = zoom;   // the HUD fades out with the zoom
       drawHUD(ctx, this);
       ctx.restore();
+      if (this.state==='paused') drawPause(ctx);
       return;
     }
 
@@ -209,6 +288,7 @@ const Game = {
     // to the panel.
     ctx.save();
     ctx.translate(x, y);
+    if (this.shake>0) ctx.translate(Math.sin(this.time*140)*CONFIG.combat.shakePixels,Math.cos(this.time*110)*CONFIG.combat.shakePixels/2);
     ctx.beginPath();
     ctx.rect(0, 0, w, h);
     ctx.clip();
@@ -216,7 +296,6 @@ const Game = {
     ctx.restore();
 
     drawPanelFrame(ctx);
-    drawHUD(ctx, this);
 
     // The hands reach in from outside the panel, over everything.
     ctx.save();
@@ -224,6 +303,8 @@ const Game = {
     this.rightHand.render(ctx);
     this.leftHand.render(ctx);
     ctx.restore();
+    drawHUD(ctx,this);
+    if (this.state==='paused') drawPause(ctx);
   },
 
   // Everything inside the panel, in panel coordinates. Also used to
@@ -231,16 +312,21 @@ const Game = {
   drawPanelContents(ctx) {
     drawPanelBackground(ctx, this.panel, this.panelIndex);
     drawSurfaces(ctx, this.panel.platforms);
+    drawObstacles(ctx,this.panel.walls);
+    for (const h of this.hazards) h.render(ctx);
     drawCaption(ctx, this.panel.caption);
     for (const c of this.clowns) if (c.active) drawShadow(ctx, this.surfaces, c.x, c.y, c.w);
     drawShadow(ctx, this.surfaces, this.pierre.x, this.pierre.y, this.pierre.w);
-    if (this.panel.theEnd) drawTheEnd(ctx);
+    if (this.panel.theEnd) drawTheEnd(ctx,this.lettering ? this.lettering.drawProgress : 0);
     else if (this.gateOpen) drawExitArrow(ctx, this.time);
     else drawGate(ctx);
     for (const i of this.items) i.render(ctx);
     for (const c of this.clowns) c.render(ctx);
     for (const p of this.pies) p.render(ctx);
-    for (const p of this.props) p.render(ctx);
+    for (const p of this.props) if (!p.done) p.render(ctx);
+    for (const f of this.friendly) f.render(ctx);
+    if (this.dog) this.dog.render(ctx);
+    this.mime.render(ctx);
     for (const n of this.noses) n.render(ctx);
     this.pierre.render(ctx);
     for (const e of this.effects) drawBurst(ctx, e);
@@ -261,4 +347,5 @@ function frame(now) {
 }
 
 Game.restart();
+Game.state='title';
 requestAnimationFrame(frame);

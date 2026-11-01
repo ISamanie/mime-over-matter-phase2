@@ -28,6 +28,7 @@ class Clown {
     this.noseless = false;  // gave up on its nose
     this.bubble = null;     // { text, t }: a speech bubble
     this.greeted = false;
+    this.trapped = 0;
   }
 
   get panicking() { return !!this.nose; }
@@ -39,13 +40,16 @@ class Clown {
   get box() { return boxOf(this); }
 
   hurt(damage, fromX, game, push = CONFIG.clowns.hitPush) {
-    if (!this.active || this.dead) return;
+    if (!this.active || this.dead) return false;
     const c = CONFIG.clowns;
     this.health -= damage;
     this.hitFlash = c.hitFlash;
     this.stun = c.hitStun;
+    const oldX = this.x;
     this.x += (this.x < fromX ? -1 : 1) * push;
     this.x = Math.max(this.surface.x + this.w / 2, Math.min(this.surface.x + this.surface.w - this.w / 2, this.x));
+    resolveSides(this, oldX, game.solidWalls());
+    game.hitFeel(false);
     if (this.health <= 0) {
       this.dead = true;
       if (this.nose) this.nose.gone = true;
@@ -53,6 +57,7 @@ class Clown {
     } else if (!this.nose && !this.noseless && Math.random() < c.noseChance) {
       this.knockNose(game, fromX);
     }
+    return true;
   }
 
   // The nose pops off and bounces away from the hit.
@@ -65,6 +70,7 @@ class Clown {
     this.panicTime = 0;
     game.noses.push(this.nose);
     game.burst('POP!', this.x + part.x * this.facing, this.y + part.y, '#e53935');
+    Sound.play('pop');
     this.say('MY NOSE!');
   }
 
@@ -74,31 +80,23 @@ class Clown {
     const n = this.nose, c = CONFIG.clowns;
     this.panicTime += dt;
     if (!this.bubble || this.bubble.t < 0.3) this.say('MY NOSE!');
-    if (!n.resting) return;
-    if (n.surface !== this.surface) {
-      if (this.panicTime > c.noseGiveUp) {
-        this.nose = null;
-        this.noseless = true;
-        this.say('GRR!');
-      }
-      return;
+    if (this.panicTime > c.noseGiveUp) {
+      this.nose = null; this.noseless = true; this.say('GRR!'); return;
     }
+    if (!n.resting) return;
+    if (n.surface !== this.surface) return;
     const half = this.w / 2, s = this.surface;
     const target = Math.max(s.x + half, Math.min(s.x + s.w - half, game.rightLimit() - half, n.x));
     const dx = target - this.x, step = c.chaseSpeed[this.type] * dt;
     this.facing = dx < 0 ? -1 : 1;
     if (this.wheel !== undefined) this.wheel += step / 24;
-    if (Math.abs(dx) > step) {
-      this.x += Math.sign(dx) * step;
-    } else if (Math.abs(n.x - target) < 1) {
-      this.x = target;
+    const oldX=this.x;
+    this.x += Math.sign(dx)*Math.min(Math.abs(dx),step);
+    resolveSides(this,oldX,game.solidWalls());
+    if (Math.abs(n.x - this.x) < 1) {
       n.gone = true;
       this.nose = null;
       this.say('HONK!');
-    } else if (this.panicTime > c.noseGiveUp) {
-      this.nose = null;      // the nose is past where this clown can go
-      this.noseless = true;
-      this.say('GRR!');
     }
   }
 
@@ -113,15 +111,19 @@ class Clown {
     this.anim += dt;
     this.hitFlash -= dt;
     this.stun -= dt;
+    this.trapped = Math.max(0, this.trapped - dt);
     if (this.bubble && (this.bubble.t -= dt) <= 0) this.bubble = null;
     if (!this.greeted) {
       this.greeted = true;   // a shout as it comes to life (spec 5.3)
       const shouts = CONFIG.clowns.shouts;
       this.say(shouts[Math.floor(Math.random() * shouts.length)]);
+      Sound.play('honk');
     }
-    if (this.stun > 0) return;
+    if (this.stun > 0 || this.trapped > 0) return;
+    const oldX = this.x;
     if (this.nose) this.chaseNose(dt, game);
     else this.act(dt, game);
+    if (resolveSides(this, oldX, game.solidWalls()) && this.type === 'unicyclist') this.facing *= -1;
   }
 
   render(ctx) {
@@ -131,6 +133,15 @@ class Clown {
     drawSketch(ctx, this.visibleParts(), this.x + shake, this.y, this.facing,
       this.active ? 1 : this.drawProgress, { lineWidth: CONFIG.rightHand.lineWidth });
     ctx.restore();
+    if (!this.active) {
+      ctx.save(); ctx.strokeStyle = '#ffd600'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(this.x, Math.max(30, this.y - this.h - 25), 15,
+        -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - this.drawProgress)); ctx.stroke(); ctx.restore();
+    }
+    if (this.trapped > 0) {
+      drawMimeBox(ctx, this.box);
+      drawMimeGlimmer(ctx, this.box, CONFIG.mime.box.duration-this.trapped);
+    }
     if (this.panicking) {
       // Sweat drops flying off its head.
       for (let i = 0; i < 3; i++) {
@@ -312,8 +323,10 @@ function makeClown(spec, surfaces) {
 // Walking enemies stay on their own riser and inside the ink line.
 function walkClown(clown, dir, speed, dt, game) {
   const s = clown.surface, half = clown.w / 2;
+  const oldX = clown.x;
   clown.x = Math.max(s.x + half, Math.min(s.x + s.w - half,
     game.rightLimit() - half, clown.x + dir * speed * dt));
+  resolveSides(clown, oldX, game.solidWalls());
 }
 
 // Shared posable costume; the prop and silhouette distinguish each act.
@@ -469,9 +482,11 @@ class BowlingPin {
     const hitPierre = segmentBoxTime(this.x, this.y, dx, dy, expanded(game.pierre.box));
     let hitSet = Infinity;
     for (const s of game.surfaces) {
+      if (s.disabled) continue;
       hitSet = Math.min(hitSet, segmentBoxTime(this.x, this.y, dx, dy,
         expanded({ left: s.x, right: s.x + s.w, top: s.y, bottom: s.y + (s.ground ? CONFIG.panel.h : 14) })));
     }
+    hitSet = Math.min(hitSet, projectileWallTime(this, dx, dy, game));
     const hit = Math.min(hitPierre, hitSet);
     this.x += dx * Math.min(1, hit);
     this.y += dy * Math.min(1, hit);
@@ -530,6 +545,7 @@ class BalloonDog {
     if (this.done || damage <= 0) return;
     this.done = true;
     game.burst('POP!', this.x, this.y - 24, '#ec407a');
+    game.hitFeel(false); Sound.play('pop');
   }
   update(dt, game) {
     if (this.done) return;
@@ -537,7 +553,9 @@ class BalloonDog {
     this.t += dt;
     if (this.t >= c.life) { this.hurt(1, this.x, game); return; }
     this.facing = p.x < this.x ? -1 : 1;
+    const oldX = this.x;
     this.x += this.facing * Math.min(Math.abs(p.x - this.x), c.speed * dt);
+    resolveSides(this, oldX, game.solidWalls());
     const prevY = this.y;
     this.vy += CONFIG.gravity * dt;
     this.y += this.vy * dt;
@@ -688,10 +706,13 @@ class Pie {
       return;
     }
     const prevY = this.y;
+    const prevX = this.x;
     this.vy += CONFIG.pie.gravity * dt;
     this.x += this.vx * dt;
     this.y += this.vy * dt;
-    if (boxesOverlap(this.box, game.pierre.box)) {
+    if (projectileWallTime({x:prevX,y:prevY,w:this.w,h:this.h}, this.x-prevX, this.y-prevY, game) <= 1) {
+      this.splatT = 0;
+    } else if (boxesOverlap(this.box, game.pierre.box)) {
       game.pierre.hurt(CONFIG.pie.damage, this.x - Math.sign(this.vx) * 100);
       this.splatT = 0;
     } else if (landOn(this, prevY, game.surfaces)) {

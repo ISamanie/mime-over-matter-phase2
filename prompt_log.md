@@ -205,3 +205,14 @@ read the read me and implement the remaining clown types, make sure to test them
 - Added four solo introductions before mixed fights (criterion 48), making an interim 10-panel game; the full 18-panel expansion remains pending.
 - Added seltzer knockback, straight pins with swept collision, poppable chasing dogs, mini-clown spawning and dynamic exit-gate counts. Car panels automatically receive the crowded-panel hammer.
 - Added focused Node acceptance tests and a separate browser playtest page; updated the smoke test and handoff documentation.
+
+### Prompt 20 (Sun 11/01/2026)
+```
+continue with unimplemented/missing items in spec
+```
+**What came back:**
+- Added solid crates, banana slips, conveyors and timed trapdoors; buffered beret combos, a finisher, jump kicks, hit freeze and screen shake.
+- Expanded to three distinct settings and 18 panels, including traversal encounters, page-aware HUD and cross-page transitions.
+- Added knives, balloon sword, pogo, slinkies, Invisible Dog, weighted random supplies, and all three mime powers with cooldowns.
+- Added title/story, pause, silent hurt bubbles, BONK impacts, countdown rings, a hand-drawn ending and bow, hand interruption/recovery, and synthesized sound with mute.
+- Extended acceptance tests and browser inspection controls. Browser checks caught and fixed text-outline/HUD layout problems. Updated the README with feature coverage and explicit playtesting limitations.

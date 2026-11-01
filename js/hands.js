@@ -16,6 +16,8 @@ class Hand {
     this.state = 'away';  // 'away', 'waiting', 'moving', 'drawing' or 'leaving'
     this.tip = { x: 0, y: -400 };
     this.time = 0;
+    this.interrupted = false;
+    this.current = null;
   }
 
   get busy() { return this.state !== 'away'; }
@@ -42,6 +44,7 @@ class Hand {
       const start = penPoint(next.parts(), next.x, next.y, next.facing, 0, 0);
       if (this.moveToward(start, dt)) {
         const { thing, onStart } = this.queue.shift();
+        this.current = {thing,onStart};
         this.job = new DrawJob(thing, this.cfg.drawTime);
         onStart(thing);
         this.state = 'drawing';
@@ -51,6 +54,7 @@ class Hand {
       this.tip = this.job.tip(this.time);
       if (this.job.done) {
         this.job = null;
+        this.current = null;
         if (this.queue.length) {
           this.state = 'moving';
         } else {
@@ -59,8 +63,33 @@ class Hand {
         }
       }
     } else if (this.state === 'leaving') {
-      if (this.moveToward(this.exit, dt)) this.state = 'away';
+      if (this.moveToward(this.exit, dt)) {
+        this.state = this.interrupted ? 'recovering' : 'away';
+        this.wait = CONFIG.handHit.returnAfter;
+      }
+    } else if (this.state === 'hurt') {
+      if ((this.wait -= dt) <= 0) this.state = 'leaving';
+    } else if (this.state === 'recovering') {
+      if ((this.wait -= dt) <= 0) {
+        this.interrupted = false; this.state = 'waiting'; this.wait = this.cfg.enterDelay;
+      }
     }
+  }
+
+  tryHit(reach, game) {
+    if (this.side !== 'right' || this.state !== 'drawing' || !this.current || game.panel.theEnd) return false;
+    const hand = {left:this.tip.x+35,right:this.tip.x+180,top:this.tip.y-210,bottom:this.tip.y-40};
+    if (!boxesOverlap(reach,hand)) return false;
+    const drawing = this.current;
+    game.clowns = game.clowns.filter(c=>c!==drawing.thing);
+    drawing.thing.active=false; drawing.thing.drawProgress=0;
+    this.queue.unshift(drawing);
+    this.job=null; this.current=null;
+    this.interrupted=true;this.state='hurt';this.wait=CONFIG.handHit.recover;
+    this.exit={x:this.tip.x,y:-CONFIG.panel.y-300};
+    game.burst('OW!',this.tip.x+90,Math.max(65,this.tip.y-180),'#ffd600');
+    game.hitFeel(true);
+    return true;
   }
 
   // Moves the pen tip toward a point; true once it's there.
@@ -85,9 +114,14 @@ class Hand {
       x += Math.sin(this.time * 11) * w;
       y += Math.cos(this.time * 8) * w * 0.6;
     }
+    if (this.state === 'hurt') x += Math.sin(this.time*55)*8;
     const topY = -(CONFIG.panel.y + y) - 20;
     drawSketch(ctx, handParts(this.side === 'right' ? 'pen' : 'crayon', topY), x, y,
       this.side === 'right' ? 1 : -1, 1, { lineWidth: 4.5 });
+    if (this.state === 'hurt') {
+      drawSpeechBubble(ctx,x+80,Math.max(50,y-190),'OW!');
+      for (let i=0;i<3;i++) outlinedText(ctx,'★',x+50+i*30,Math.max(70,y-140)+Math.sin(this.time*9+i)*12,24,'#ffd600');
+    }
   }
 }
 

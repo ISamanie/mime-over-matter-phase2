@@ -5,6 +5,8 @@ class Pierre {
     this.h = CONFIG.pierre.h;
     this.health = CONFIG.pierre.maxHealth;
     this.held = null;   // a melee item, e.g. { kind: 'hammer', swings: 10 }
+    this.knives = 0;
+    this.slinkies = 0;
     this.placeAtStart();
   }
 
@@ -24,6 +26,17 @@ class Pierre {
     this.strikeIn = 0;          // seconds until the current swing's hit lands
     this.swingTool = 'beret';   // what the current swing is with: 'beret' or 'hammer'
     this.walkPhase = 0;
+    this.combo = 0;
+    this.comboTime = 0;
+    this.swingKind = 'slap';
+    this.slipTimer = this.slipGrace = 0;
+    this.slipDir = 1;
+    this.knifeCooldown = 0;
+    this.bubbleTime = 0;
+    this.mimePose = 0;
+    this.mimeKind = null;
+    this.attackQueue = 0;
+    this.attackBufferTime = 0;
   }
 
   get box() { return boxOf(this); }
@@ -34,18 +47,38 @@ class Pierre {
     this.knockLock -= dt;
     this.punchCooldown -= dt;
     this.punchTimer -= dt;
+    this.comboTime -= dt;
+    this.slipTimer -= dt;
+    this.slipGrace -= dt;
+    this.knifeCooldown -= dt;
+    this.bubbleTime -= dt;
+    this.mimePose = Math.max(0, this.mimePose - dt);
+    this.attackBufferTime -= dt;
+    if (this.attackBufferTime <= 0) this.attackQueue = 0;
+    if (Input.wasPressed(...KEYS.attack) && this.knockLock <= 0) {
+      this.bufferAttack();
+    }
+    if (this.held && this.held.kind === 'pogo' && (this.held.time -= dt) <= 0) this.held = null;
     if (this.strikeIn > 0 && (this.strikeIn -= dt) <= 0) this.strike(game);
 
     if (this.knockLock <= 0) {
       const dir = (Input.isDown(...KEYS.right) ? 1 : 0) - (Input.isDown(...KEYS.left) ? 1 : 0);
-      this.vx = dir * c.speed;
+      this.vx = this.slipTimer > 0 ? this.slipDir * CONFIG.hazards.slipSpeed : dir * c.speed;
       if (dir) this.facing = dir;
       if (this.onGround && Input.wasPressed(...KEYS.jump)) {
-        this.vy = -c.jumpSpeed;
+        this.vy = -(this.held && this.held.kind === 'pogo' ? CONFIG.pogo.jumpSpeed : c.jumpSpeed);
         this.onGround = false;
         this.rising = true;
       }
-      if (Input.wasPressed(...KEYS.attack) && this.punchCooldown <= 0) this.punch(game);
+      if (this.attackQueue > 0 && this.punchCooldown <= 0) {
+        this.attackQueue--; this.punch(game);
+      }
+      if (Input.wasPressed(...KEYS.knife) && this.knifeCooldown <= 0 && this.knives > 0) {
+        this.knives--;
+        this.knifeCooldown = CONFIG.knives.cooldown;
+        game.friendly.push(new Knife(this.x + this.facing * 24, this.y - 76, this.facing));
+      }
+      for (const power of ['wall', 'rope', 'box']) if (Input.wasPressed(...KEYS[power])) game.mime.use(power, game);
     }
     // Letting go of Jump early gives a shorter hop.
     if (this.rising && (this.vy >= 0 || !Input.isDown(...KEYS.jump))) {
@@ -55,9 +88,21 @@ class Pierre {
 
     const prevY = this.y;
     this.vy += CONFIG.gravity * dt;
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
-    this.onGround = !!landOn(this, prevY, game.surfaces);
+    const carry = game.hazards.reduce((n, h) => n + h.carry(this), 0);
+    this.onGround = !!moveBody(this, dt, game, carry);
+    if (this.held && this.held.kind === 'pogo' && this.vy >= 0) {
+      const target = game.clowns.find(c => c.active && !c.dead && prevY <= c.y - c.h + 18 &&
+        this.y >= c.y - c.h && Math.abs(this.x - c.x) < (this.w + c.w) / 2);
+      if (target) {
+        target.hurt(CONFIG.pogo.damage, this.x, game);
+        game.burst('BOING!', target.x, target.y - target.h);
+        this.y = target.y - target.h; this.vy = -CONFIG.pogo.bounceSpeed; this.onGround = false;
+      }
+    }
+    if (this.onGround && this.held && this.held.kind==='pogo') {
+      this.vy=-CONFIG.pogo.jumpSpeed; this.onGround=false; this.rising=false;
+    }
+    for (const hazard of game.hazards) hazard.apply(this, game);
 
     // The left edge is a wall; so is the right edge until the ink line goes.
     this.x = Math.max(this.w / 2, Math.min(game.rightLimit() - this.w / 2, this.x));
@@ -67,43 +112,80 @@ class Pierre {
 
   get hasHammer() { return this.held && this.held.kind === 'hammer'; }
 
+  bufferAttack() {
+    this.attackQueue=Math.min(3,this.attackQueue+1);
+    this.attackBufferTime=CONFIG.pierre.comboWindow;
+  }
+
   // J: Pierre whips off his beret and slaps with it, or swings the
   // squeaky hammer if he's holding it. The hit lands partway through the
   // swing (strike).
   punch(game) {
+    this.mimePose = 0;
     const c = CONFIG.pierre, hammer = this.hasHammer ? CONFIG.hammer : null;
-    this.swingTool = hammer ? 'hammer' : 'beret';
-    this.punchCooldown = hammer ? hammer.cooldown : c.punchCooldown;
+    const sword = this.held && this.held.kind === 'balloonSword' ? CONFIG.balloonSword : null;
+    if (this.held && this.held.kind === 'slinky') {
+      if (this.slinkies > 0) {
+        this.slinkies--;
+        game.friendly.push(new Slinky(this.x, this.y, this.facing));
+      }
+      if (this.slinkies <= 0) this.held = null;
+      this.punchCooldown = c.punchCooldown;
+      return;
+    }
+    this.swingTool = hammer ? 'hammer' : sword ? 'balloonSword' : 'beret';
+    this.swingKind = !this.onGround ? 'kick' : 'slap';
+    if (!hammer && !sword && this.onGround) {
+      this.combo = this.comboTime > 0 ? this.combo % 3 + 1 : 1;
+      this.comboTime = c.comboWindow;
+      if (this.combo === 3) this.swingKind = 'finisher';
+    } else { this.combo = 0; this.comboTime = 0; }
+    this.punchCooldown = hammer ? hammer.cooldown : sword ? sword.cooldown : c.punchCooldown;
     this.punchTimer = hammer ? hammer.show : c.punchShow;
     this.strikeIn = c.strikeDelay;
     if (hammer && --this.held.swings <= 0) {
       this.held = null;
       game.burst('CRACK!', this.x + this.facing * 50, this.y - 90, '#8d6e63');
     }
+    if (sword && --this.held.swings <= 0) {
+      this.held = null;
+      game.burst('POP!', this.x + this.facing * 50, this.y - 90, '#ec407a');
+      Sound.play('pop');
+    }
   }
 
   strike(game) {
     const c = CONFIG.pierre, hammer = this.swingTool === 'hammer' ? CONFIG.hammer : null;
-    const range = hammer ? hammer.range : c.punchRange;
+    const sword = this.swingTool === 'balloonSword' ? CONFIG.balloonSword : null;
+    const kick = this.swingKind === 'kick', finisher = this.swingKind === 'finisher';
+    const range = kick ? c.kickRange : hammer ? hammer.range : sword ? sword.range : c.punchRange;
     const reach = {
       left: this.facing > 0 ? this.x : this.x - this.w / 2 - range,
       right: this.facing > 0 ? this.x + this.w / 2 + range : this.x,
-      top: this.y - this.h + 8,
-      bottom: this.y - 16,
+      top: kick ? this.y - 65 : this.y - this.h + 8,
+      bottom: kick ? this.y + 24 : this.y - 16,
     };
     const targets = [...game.clowns, ...game.props.filter(p => p instanceof BalloonDog)];
     for (const clown of targets) {
       if (clown.active && !clown.dead && !clown.done && boxesOverlap(reach, clown.box)) {
         const y = clown.y - clown.h * 0.6;
-        if (hammer) {
+        if (kick) {
+          clown.hurt(c.kickDamage, this.x, game, 35);
+          game.burst('KICK!', clown.x, y, '#ffd600');
+        } else if (hammer) {
           clown.hurt(hammer.damage, this.x, game, hammer.push);
           game.burst('SQUEAK!', clown.x - this.facing * clown.w / 4, y, '#1e88e5');
+        } else if (sword) {
+          clown.hurt(sword.damage, this.x, game, 4);
+          game.burst('POK!', clown.x, y, '#ec407a');
         } else {
-          clown.hurt(c.punchDamage, this.x, game);
+          clown.hurt(finisher ? c.finisherDamage : c.punchDamage, this.x, game, finisher ? c.finisherPush : CONFIG.clowns.hitPush);
           game.burst('SLAP!', clown.x - this.facing * clown.w / 4, y);
         }
+        game.hitFeel(finisher);
       }
     }
+    if (hammer && !kick) game.rightHand.tryHit(reach, game);
   }
 
   // Takes a hit from something at fromX. Ignored while flashing.
@@ -117,6 +199,11 @@ class Pierre {
     this.vy = -c.knockbackY;
     this.onGround = false;
     this.rising = false;
+    this.combo = 0; this.comboTime = 0;
+    this.attackQueue = 0;
+    this.bubbleTime = 1;
+    this.mimePose = 0;
+    if (damage > 0) { Game.burst('BONK!', this.x, this.y - 80, '#ffd600'); Game.hitFeel(false); }
     return true;
   }
 
@@ -134,10 +221,14 @@ class Pierre {
     const bob = walking ? Math.abs(Math.sin(ph)) * 3 : 0;
     const hurt = this.knockLock > 0;
     const lean = hurt ? -6 : 0;
+    const gesture = !hurt && this.punchTimer <= 0 && this.mimePose > 0
+      ? mimeGesture(this.mimeKind, 1-this.mimePose/CONFIG.mime.poseDuration) : null;
 
     // Legs: [hip, knee, foot] for the back and front leg.
     let legs;
-    if (!this.onGround) {
+    if (this.swingKind === 'kick' && this.punchTimer > 0) {
+      legs = [[[-5,-46],[-14,-25],[-17,-9]], [[6,-46],[31,-27],[55,-10]]];
+    } else if (!this.onGround) {
       legs = [[[-5, -46], [6, -28], [-2, -10]], [[6, -46], [22, -34], [16, -14]]];
     } else {
       legs = [0, Math.PI].map((off, i) => {
@@ -153,13 +244,16 @@ class Pierre {
     if (hurt) {
       backArm = [[-4, -84], [-20, -98], [-26, -116]];
       frontArm = [[8, -84], [22, -100], [18, -118]];
+    } else if (gesture) {
+      backArm = gesture.back;
+      frontArm = gesture.front;
     } else if (this.punchTimer > 0) {
       backArm = [[-4, -84], [-10, -68], [4, -74]];
       if (this.swingTool === 'hammer') {
         frontArm = [[8, -84], [30, -84], [52, -83]];
       } else {
         // The beret slap: the arm sweeps from up behind his head to out in front.
-        const a = slapAngle(this.punchTimer);
+        const a = slapAngle(this.punchTimer) + (this.combo === 2 ? -0.35 : this.swingKind === 'finisher' ? 0.35 : 0);
         const elbow = [8 + Math.cos(a - 0.35) * 21, -84 + Math.sin(a - 0.35) * 21];
         frontArm = [[8, -84], elbow, [elbow[0] + Math.cos(a + 0.1) * 21, elbow[1] + Math.sin(a + 0.1) * 21]];
       }
@@ -183,11 +277,15 @@ class Pierre {
     const arm = ([sh, el, hand], glove) => [
       limb(...sh, ...el, 12, 11, '#fff', shirt),
       limb(...el, ...hand, 11, 10, '#fff', shirt),
-      { shape: 'circle', x: hand[0], y: hand[1], r: glove, fill: '#fff' },
+      ...(gesture && gesture.palms
+        ? [{shape:'poly',pts:[[hand[0]-5,hand[1]+7],[hand[0]-6,hand[1]-8],
+          [hand[0]-1,hand[1]-13],[hand[0]+5,hand[1]-11],[hand[0]+7,hand[1]+5]],fill:'#fff'},
+          {shape:'line',pts:[[hand[0]+1,hand[1]-8],[hand[0]+2,hand[1]+2]],lw:1.5}]
+        : [{ shape: 'circle', x: hand[0], y: hand[1], r: glove, fill: '#fff' }]),
     ];
     const up = (parts) => parts.map(p => shiftPart(p, lean, -bob));
     // While slapping, the beret is in his hand and his bald head shows.
-    const slapping = this.punchTimer > 0 && this.swingTool === 'beret' && !hurt;
+    const slapping = this.punchTimer > 0 && this.swingTool === 'beret' && this.swingKind!=='kick' && !hurt;
     const beretOn = [
       { shape: 'circle', x: 1, y: -120, r: 18, ry: 6, fill: INK },
       { shape: 'circle', x: 1, y: -127, r: 3, fill: INK },
@@ -214,6 +312,8 @@ class Pierre {
       ...(slapping ? beretOff : beretOn),
       ...arm(frontArm, this.punchTimer > 0 ? 9 : 7),
       ...(slapping ? beretInHand(frontArm[2], slapAngle(this.punchTimer)) : []),
+      ...(this.held && this.held.kind === 'balloonSword' ? balloonSwordParts(frontArm[2]) : []),
+      ...(this.held && this.held.kind === 'pogo' ? pogoParts(0, 0) : []),
       // The hammer: carried angled forward (clear of his face), swung out
       // level when attacking.
       ...(this.hasHammer
@@ -221,14 +321,55 @@ class Pierre {
           ? hammerParts(frontArm[2], [frontArm[2][0] + 40, frontArm[2][1]], 'flat')
           : hammerParts(frontArm[2], [frontArm[2][0] + 30, frontArm[2][1] - 30], 'up'))
         : []),
-    ]);
+    ]).map(part=>{
+      if (Game.state!=='end') return part;
+      const points=partPoints(part);
+      if (points.some(([,y])=>y>-45)) return part;
+      // Bend from the waist; Pierre's feet stay planted for the silent bow.
+      const a=Math.min(1,Game.endTime/1.4)*0.9;
+      return {...part,shape:part.shape==='line'?'line':'poly',pts:points.map(([x,y])=>
+        [x*Math.cos(a)-(y+45)*Math.sin(a),-45+x*Math.sin(a)+(y+45)*Math.cos(a)])};
+    });
   }
 
   render(ctx) {
     // Flash while invincible after a hit.
     if (this.invincible > 0 && Math.floor(this.invincible * 12) % 2 === 1) return;
     drawSketch(ctx, this.parts(), this.x, this.y, this.facing);
+    if (this.bubbleTime > 0) drawSpeechBubble(ctx, this.x, this.y - this.h - 25, '…');
   }
+}
+
+// Local joint poses: ease into a routine, perform it, then settle back.
+// Purely visual; movement, hits and power cooldowns stay responsive.
+function mimeGesture(kind, progress) {
+  const t = Math.max(0, Math.min(1, progress));
+  const smooth = v => {v=Math.max(0,Math.min(1,v));return v*v*(3-2*v);};
+  const weight = smooth(t/0.18)*smooth((1-t)/0.22);
+  const rest = {back:[[-4,-84],[-2,-64],[8,-49]],front:[[8,-84],[10,-64],[20,-49]]};
+  let back,front;
+  if (kind === 'rope') {
+    // Alternating fists reach forward and draw the rope into his chest.
+    const pull = (phase, shoulder) => {
+      const reach = (1+Math.cos(t*Math.PI*4+phase))/2;
+      return [[shoulder,-84],[18+reach*12,-72],[19+reach*35,-81-reach*5]];
+    };
+    back=pull(Math.PI,-4);front=pull(0,8);
+  } else if (kind === 'box') {
+    // Both palms trace the top corners, sides, then bottom of the box.
+    const trace = smooth((t-0.12)/0.65)*3;
+    const spread = trace<1 ? trace : trace<2 ? 1 : 3-trace;
+    const y = trace<1 ? -121 : trace<2 ? -121+(trace-1)*59 : -62;
+    back=[[-4,-84],[12,-91],[27-spread*23,y]];
+    front=[[8,-84],[29,-84],[27+spread*23,y]];
+  } else {
+    // Two flat palms meet the wall, with a small elastic recoil.
+    const press = Math.sin(Math.max(0,t-0.18)*Math.PI*3)*2;
+    back=[[-4,-84],[20,-101],[48+press,-108]];
+    front=[[8,-84],[30,-66],[48+press,-70]];
+  }
+  const blend = (from,to) => from.map((joint,i)=>joint.map((v,j)=>v+(to[i][j]-v)*weight));
+  return {back:blend(rest.back,back),front:blend(rest.front,front),palms:kind!=='rope'};
 }
 
 // The angle of Pierre's arm during a beret slap, from up behind his head
