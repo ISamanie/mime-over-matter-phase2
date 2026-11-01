@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mime Over Matter</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #222; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; background: #fff; width: min(100vw, calc(100vh * 1.5)); height: auto; }
+</style>
+</head>
+<body>
+<canvas id="game" width="960" height="640"></canvas>
+<!-- Plain scripts, not ES modules, so the game runs from file:// with no server. Order matters. -->
+<script src="js/config.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/render.js"></script>
+<script src="js/page.js"></script>
+<script src="js/drawing.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/pierre.js"></script>
+<script src="js/clowns.js"></script>
+<script src="js/items.js"></script>
+<script src="js/hands.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
