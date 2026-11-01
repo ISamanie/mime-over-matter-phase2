@@ -18,6 +18,7 @@
   <button id="clear">Clear panel</button>
   <button id="restart">Restart game</button>
   <button id="step">Advance 1 second</button>
+  <button id="frame">Advance 1 frame</button>
   <select id="panel" aria-label="Panel to preview"></select>
   <button id="load">Load panel</button>
   <button id="turn">Preview page turn</button>
@@ -85,6 +86,7 @@
   };
   document.getElementById('restart').onclick = () => { Game.restart(); setPractice(); focusGame(); };
   document.getElementById('step').onclick = () => advance(1);
+  document.getElementById('frame').onclick = () => advance(1/60);
   document.getElementById('load').onclick = () => {Game.restart();Game.loadPanel(Number(panelSelect.value));setPractice();Game.render();showStatus();focusGame();};
   document.getElementById('turn').onclick = () => {if(Game.panelIndex<17){Game.nextPanel();Game.render();showStatus();}};
   document.getElementById('walk').onclick = () => simulate(['ArrowRight'],1);

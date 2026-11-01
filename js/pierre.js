@@ -211,8 +211,8 @@ class Pierre {
     this.health = Math.min(CONFIG.pierre.maxHealth, this.health + amount);
   }
 
-  // Black, white and grey only: striped shirt, white face and gloves,
-  // black beret, mime makeup. Arms and legs are posed from joint positions.
+  // Design D's angular silhouette, using the same brush and joint rig as
+  // the rest of the comic: faceted face/gloves, tilted beret and wedge shoes.
   parts() {
     const shirt = { stripes: { color: '#1c1c1c', gap: 12, width: 5 } };
     const pants = '#3b3b3b';
@@ -270,46 +270,40 @@ class Pierre {
       frontArm = arm(8, -a);
     }
     const leg = ([hip, knee, foot]) => [
-      limb(...hip, ...knee, 15, 13, pants),
-      limb(...knee, ...foot, 13, 11, pants),
-      { shape: 'circle', x: foot[0] + 6, y: foot[1] - 3, r: 11, ry: 5, fill: INK },
+      pierreSegment(...hip, ...knee, 18, 13, pants),
+      pierreSegment(...knee, ...foot, 13, 10, pants),
+      { shape: 'poly', pts: [[foot[0]-7,foot[1]-9],[foot[0]+6,foot[1]-9],
+        [foot[0]+20,foot[1]-1],[foot[0]+18,foot[1]+2],[foot[0]-9,foot[1]+2]], fill: INK },
     ];
     const arm = ([sh, el, hand], glove) => [
-      limb(...sh, ...el, 12, 11, '#fff', shirt),
-      limb(...el, ...hand, 11, 10, '#fff', shirt),
+      pierreSegment(...sh, ...el, 12, 11, '#fff', shirt),
+      pierreSegment(...el, ...hand, 11, 10, '#fff', shirt),
       ...(gesture && gesture.palms
         ? [{shape:'poly',pts:[[hand[0]-5,hand[1]+7],[hand[0]-6,hand[1]-8],
           [hand[0]-1,hand[1]-13],[hand[0]+5,hand[1]-11],[hand[0]+7,hand[1]+5]],fill:'#fff'},
           {shape:'line',pts:[[hand[0]+1,hand[1]-8],[hand[0]+2,hand[1]+2]],lw:1.5}]
-        : [{ shape: 'circle', x: hand[0], y: hand[1], r: glove, fill: '#fff' }]),
+        : [{shape:'poly',pts:[[-0.65,-1],[0.55,-1],[1,-0.25],[0.7,0.8],[-0.45,1],[-1,0.2]]
+          .map(([x,y])=>[hand[0]+x*glove,hand[1]+y*glove]),fill:'#fff'}]),
     ];
     const up = (parts) => parts.map(p => shiftPart(p, lean, -bob));
     // While slapping, the beret is in his hand and his bald head shows.
     const slapping = this.punchTimer > 0 && this.swingTool === 'beret' && this.swingKind!=='kick' && !hurt;
-    const beretOn = [
-      { shape: 'circle', x: 1, y: -120, r: 18, ry: 6, fill: INK },
-      { shape: 'circle', x: 1, y: -127, r: 3, fill: INK },
-    ];
-    const beretOff = [
-      { shape: 'line', pts: [[-6, -118], [-3, -125]], lw: 2 },
-      { shape: 'line', pts: [[0, -120], [2, -127]], lw: 2 },
-      { shape: 'line', pts: [[6, -119], [9, -125]], lw: 2 },
-    ];
+    const beretOn = pierreBeret(0, -123, -0.32);
 
     return up([
       ...arm(backArm, 7),
       ...leg(legs[0]),
       ...leg(legs[1]),
-      { shape: 'poly', pts: [[-12, -54], [14, -54], [15, -40], [-13, -40]], fill: pants },
-      { shape: 'poly', pts: [[-14, -90], [16, -90], [13, -50], [-11, -50]], fill: '#fff', ...shirt },
-      { shape: 'circle', x: 3, y: -104, r: 16, ry: 17, fill: '#fff', shade: 0.1 },
+      { shape: 'poly', pts: [[-12,-61],[11,-61],[18,-44],[10,-39],[-15,-42]], fill: pants },
+      { shape: 'poly', pts: [[-12,-90],[15,-90],[9,-59],[-13,-59]], fill: '#fff', ...shirt },
+      { shape: 'poly', pts: [[-6,-123],[11,-120],[20,-105],[11,-89],[-3,-91],[-14,-107]], fill: '#fff', shade: 0.1 },
       // Mime makeup: a high arched brow, a long painted eye, a black tear, dark lips.
       { shape: 'line', pts: [[2, -115], [8, -120], [14, -116]], lw: 3 },
       { shape: 'poly', pts: [[8, -114], [11, -108], [8, -100], [5, -108]], fill: INK, flat: true },
       { shape: 'circle', x: 9, y: -108, r: 1.5, fill: '#fff', flat: true },
       { shape: 'poly', pts: [[13, -100], [15, -96], [13, -93], [11, -96]], fill: INK, flat: true },
-      { shape: 'poly', pts: [[6, -92], [17, -93], [12, -88]], fill: '#222', flat: true },
-      ...(slapping ? beretOff : beretOn),
+      { shape: 'line', pts: [[8,-94],[16,-94]], lw: 2.5 },
+      ...(slapping ? [] : beretOn),
       ...arm(frontArm, this.punchTimer > 0 ? 9 : 7),
       ...(slapping ? beretInHand(frontArm[2], slapAngle(this.punchTimer)) : []),
       ...(this.held && this.held.kind === 'balloonSword' ? balloonSwordParts(frontArm[2]) : []),
@@ -338,6 +332,32 @@ class Pierre {
     drawSketch(ctx, this.parts(), this.x, this.y, this.facing);
     if (this.bubbleTime > 0) drawSpeechBubble(ctx, this.x, this.y - this.h - 25, '…');
   }
+}
+
+// Straight tapered costume pieces keep their angular silhouette as the
+// existing shoulder/elbow/hip/knee joints move. Overlap hides joint gaps.
+function pierreSegment(ax, ay, bx, by, w1, w2, fill, extra = {}) {
+  const length = Math.hypot(bx-ax,by-ay) || 1;
+  const ux=(bx-ax)/length, uy=(by-ay)/length, nx=-uy, ny=ux;
+  return {shape:'poly',pts:[
+    [ax-ux*2+nx*w1/2,ay-uy*2+ny*w1/2],
+    [bx+ux*2+nx*w2/2,by+uy*2+ny*w2/2],
+    [bx+ux*2-nx*w2/2,by+uy*2-ny*w2/2],
+    [ax-ux*2-nx*w1/2,ay-uy*2-ny*w1/2],
+  ],fill,...extra};
+}
+
+// One hat design for wearing and slapping, including its little stalk.
+function pierreBeret(cx, cy, angle) {
+  const turn = ([x,y]) => [cx+x*Math.cos(angle)-y*Math.sin(angle),cy+x*Math.sin(angle)+y*Math.cos(angle)];
+  const rim = Array.from({length:16},(_,i)=>{
+    const t=i/16*Math.PI*2;
+    return turn([Math.cos(t)*19,Math.sin(t)*6]);
+  });
+  return [
+    {shape:'poly',pts:[[-4,-5],[-5,-12],[-2,-13],[0,-5]].map(turn),fill:INK},
+    {shape:'poly',pts:rim,fill:INK},
+  ];
 }
 
 // Local joint poses: ease into a routine, perform it, then settle back.
@@ -383,12 +403,6 @@ function slapAngle(timeLeft) {
 // behind it.
 function beretInHand([hx, hy], a) {
   const cx = hx + Math.cos(a) * 12, cy = hy + Math.sin(a) * 12;
-  const rot = a + Math.PI / 2, pts = [];
-  for (let i = 0; i < 16; i++) {
-    const t = (i / 16) * Math.PI * 2;
-    const ex = Math.cos(t) * 19, ey = Math.sin(t) * 6;
-    pts.push([cx + ex * Math.cos(rot) - ey * Math.sin(rot), cy + ex * Math.sin(rot) + ey * Math.cos(rot)]);
-  }
   const arc = r => {
     const out = [];
     for (let k = 0; k <= 6; k++) {
@@ -397,7 +411,7 @@ function beretInHand([hx, hy], a) {
     }
     return { shape: 'line', pts: out, lw: 2.5 };
   };
-  return [arc(56), arc(66), { shape: 'poly', pts, fill: INK }];
+  return [arc(56), arc(66), ...pierreBeret(cx, cy, a + Math.PI / 2)];
 }
 
 // A copy of a part moved by (dx, dy).
