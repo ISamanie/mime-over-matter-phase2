@@ -1,6 +1,5 @@
-// The clowns (spec 5.4) and the pies they throw. Each clown has one job:
-// the Unicyclist rides back and forth and hurts on contact; the Pie Tosser
-// stays put and lobs pies. Clowns are drawn by the right hand and do
+// The clowns (spec 5.4) and their props. Each clown has one job.
+// Clowns are drawn by the right hand and do
 // nothing until `active` (see DrawJob in drawing.js).
 //
 // Any hit that doesn't defeat a clown may knock its red nose off. The
@@ -110,6 +109,7 @@ class Clown {
   }
 
   update(dt, game) {
+    if (!this.active || this.dead) return;
     this.anim += dt;
     this.hitFlash -= dt;
     this.stun -= dt;
@@ -302,7 +302,313 @@ class PieTosser extends Clown {
 function makeClown(spec, surfaces) {
   if (spec.type === 'unicyclist') return new Unicyclist(spec, surfaces);
   if (spec.type === 'pieTosser') return new PieTosser(spec, surfaces);
+  if (spec.type === 'seltzerSpritzer') return new SeltzerSpritzer(spec, surfaces);
+  if (spec.type === 'juggler') return new Juggler(spec, surfaces);
+  if (spec.type === 'balloonTwister') return new BalloonTwister(spec, surfaces);
+  if (spec.type === 'clownCar') return new ClownCar(spec, surfaces);
   throw new Error(`Unknown clown type: ${spec.type}`);
+}
+
+// Walking enemies stay on their own riser and inside the ink line.
+function walkClown(clown, dir, speed, dt, game) {
+  const s = clown.surface, half = clown.w / 2;
+  clown.x = Math.max(s.x + half, Math.min(s.x + s.w - half,
+    game.rightLimit() - half, clown.x + dir * speed * dt));
+}
+
+// Shared posable costume; the prop and silhouette distinguish each act.
+function performerParts(clown, suit, hair, hands = [[-37, -73], [40, -79]]) {
+  const stride = Math.sin(clown.anim * 9) * 6;
+  if (clown.panicking) hands = [[-38, -135 + stride], [38, -135 - stride]];
+  const parts = [];
+  for (const side of [-1, 1]) {
+    parts.push(limb(side * 11, -48, side * 16 + stride * side, -12, 18, 13, '#1565c0'));
+    parts.push({ shape: 'circle', x: side * 20 + stride * side, y: -7, r: 18, ry: 7, fill: '#ffd600' });
+  }
+  parts.push({ shape: 'poly', pts: [[-22, -105], [22, -105], [28, -47], [-28, -47]], fill: suit,
+    dots: { color: '#fff176', r: 3, gap: 13 } });
+  hands.forEach(([x, y], i) => {
+    const sx = i ? 20 : -20;
+    parts.push(limb(sx, -96, x * 0.8, y + 10, 13, 11, suit),
+      limb(x * 0.8, y + 10, x, y, 11, 9, suit),
+      { shape: 'circle', x, y, r: 7, fill: '#fff' });
+  });
+  parts.push(
+    { shape: 'poly', pts: [[-25, -106], [0, -96], [25, -106], [0, -113]], fill: '#fff' },
+    { shape: 'circle', x: -19, y: -126, r: 11, fill: hair },
+    { shape: 'circle', x: 19, y: -126, r: 11, fill: hair },
+    { shape: 'circle', x: 0, y: -124, r: 18, ry: 20, fill: '#fff', shade: 0.1 },
+    { shape: 'poly', pts: [[4, -137], [10, -130], [4, -123], [0, -130]], fill: '#42a5f5', flat: true },
+    { shape: 'line', pts: [[5, -133], [5, -127]], lw: 3 },
+    clown.panicking
+      ? { shape: 'circle', x: 5, y: -111, r: 5, ry: 6, fill: '#5d0000' }
+      : { shape: 'poly', pts: [[-7, -116], [13, -116], [7, -107], [-2, -107]], fill: '#e53935' },
+    { shape: 'circle', x: 15, y: -123, r: 7, fill: '#e53935', tag: 'nose' });
+  return parts;
+}
+
+class SeltzerSpritzer extends Clown {
+  constructor(spec, surfaces) {
+    super(spec, surfaces);
+    this.sprayTimer = CONFIG.clowns.seltzerSpritzer.windup;
+  }
+
+  act(dt, game) {
+    const c = CONFIG.clowns.seltzerSpritzer, p = game.pierre;
+    this.facing = p.x < this.x ? -1 : 1;
+    const close = Math.abs(p.x - this.x) <= c.range && p.box.bottom > this.y - 102 && p.box.top < this.y - 54;
+    if (!close) {
+      walkClown(this, this.facing, c.speed, dt, game);
+      this.sprayTimer = Math.max(c.windup, this.sprayTimer - dt);
+    } else if ((this.sprayTimer -= dt) <= 0) {
+      game.props.push(new SeltzerSpray(this.x + this.facing * 30, this.y - 54, this.facing));
+      this.say('PSSSH!');
+      this.sprayTimer = c.sprayEvery;
+    }
+  }
+
+  parts() {
+    return [...performerParts(this, '#1e88e5', '#ff9800'),
+      { shape: 'circle', x: 39, y: -64, r: 13, ry: 20, fill: '#81d4fa' },
+      { shape: 'rect', x: 34, y: -91, w: 10, h: 12, fill: '#ffd600' },
+      { shape: 'line', pts: [[38, -91], [55, -91], [55, -84]], lw: 5 }];
+  }
+}
+
+// A visible short burst, with at most one push and no health damage.
+class SeltzerSpray {
+  constructor(x, y, facing) {
+    Object.assign(this, { x, y, facing, t: 0, hit: false, done: false });
+  }
+  update(dt, game) {
+    if (this.done) return;
+    const c = CONFIG.seltzer;
+    this.t += dt;
+    if (this.t >= c.duration) { this.done = true; return; }
+    const reach = { left: this.facing > 0 ? this.x : this.x - c.w,
+      right: this.facing > 0 ? this.x + c.w : this.x, top: this.y - c.h, bottom: this.y };
+    const p = game.pierre;
+    if (!this.hit && boxesOverlap(reach, p.box) && p.hurt(0, this.x - this.facing * 100)) {
+      this.hit = true;
+      p.vx = this.facing * c.push;
+      p.vy = -c.lift;
+    }
+  }
+  render(ctx) {
+    const c = CONFIG.seltzer;
+    const parts = Array.from({ length: 12 }, (_, i) => {
+      const f = ((i / 12 + this.t * 2) % 1);
+      return { shape: 'circle', x: f * c.w, y: -c.h / 2 + Math.sin(i * 7) * f * c.h / 2,
+        r: 2 + f * 3, fill: '#81d4fa', flat: true };
+    });
+    drawSketch(ctx, parts, this.x, this.y, this.facing, 1, { lineWidth: 2 });
+  }
+}
+
+class Juggler extends Clown {
+  constructor(spec, surfaces) {
+    super(spec, surfaces);
+    this.throwTimer = CONFIG.clowns.juggler.windup;
+  }
+  act(dt, game) {
+    const c = CONFIG.clowns.juggler, p = game.pierre;
+    this.facing = p.x < this.x ? -1 : 1;
+    this.throwTimer = Math.max(0, this.throwTimer - dt);
+    if (Math.hypot(p.x - this.x, p.y - this.y) > c.range) {
+      this.throwTimer = Math.max(c.windup, this.throwTimer);
+    } else if (this.throwTimer <= 0) {
+      const x = this.x + this.facing * 38, y = this.y - 85;
+      const dx = p.x - x, dy = p.y - p.h / 2 - y;
+      const length = Math.hypot(dx, dy) || 1;
+      game.props.push(new BowlingPin(x, y, dx / length * CONFIG.pin.speed, dy / length * CONFIG.pin.speed));
+      this.throwTimer = c.throwEvery;
+    }
+  }
+  parts() {
+    const parts = performerParts(this, '#ab47bc', '#43a047', [[-38, -105], [38, -105]]);
+    if (!this.panicking) for (let i = 0; i < 3; i++) {
+      const a = this.anim * 3 + i * Math.PI * 2 / 3;
+      parts.push(...pinParts(Math.cos(a) * 48, -155 - Math.sin(a) * 32));
+    }
+    return parts;
+  }
+}
+
+function pinParts(x, y) {
+  return [
+    { shape: 'poly', pts: [[x - 5, y - 13], [x + 5, y - 13], [x + 3, y - 5], [x + 9, y + 8], [x + 7, y + 14], [x - 7, y + 14], [x - 9, y + 8], [x - 3, y - 5]], fill: '#fff' },
+    { shape: 'line', pts: [[x - 4, y - 5], [x + 4, y - 5]], lw: 4, stroke: '#e53935' },
+  ];
+}
+
+// Straight flight: no pie gravity. Segment sweep prevents fast pins from
+// skipping Pierre or a platform, including hits against platform sides.
+function segmentBoxTime(x, y, dx, dy, box) {
+  let enter = 0, exit = 1;
+  for (const [pos, delta, lo, hi] of [[x, dx, box.left, box.right], [y, dy, box.top, box.bottom]]) {
+    if (delta === 0) { if (pos < lo || pos > hi) return Infinity; }
+    else {
+      const a = (lo - pos) / delta, b = (hi - pos) / delta;
+      enter = Math.max(enter, Math.min(a, b));
+      exit = Math.min(exit, Math.max(a, b));
+      if (enter > exit) return Infinity;
+    }
+  }
+  return enter;
+}
+
+class BowlingPin {
+  constructor(x, y, vx, vy) {
+    Object.assign(this, { x, y, vx, vy, w: CONFIG.pin.w, h: CONFIG.pin.h, t: 0, done: false });
+  }
+  update(dt, game) {
+    if (this.done) return;
+    this.t += dt;
+    const dx = this.vx * dt, dy = this.vy * dt, half = this.w / 2;
+    const expanded = b => ({ left: b.left - half, right: b.right + half, top: b.top, bottom: b.bottom + this.h });
+    const hitPierre = segmentBoxTime(this.x, this.y, dx, dy, expanded(game.pierre.box));
+    let hitSet = Infinity;
+    for (const s of game.surfaces) {
+      hitSet = Math.min(hitSet, segmentBoxTime(this.x, this.y, dx, dy,
+        expanded({ left: s.x, right: s.x + s.w, top: s.y, bottom: s.y + (s.ground ? CONFIG.panel.h : 14) })));
+    }
+    const hit = Math.min(hitPierre, hitSet);
+    this.x += dx * Math.min(1, hit);
+    this.y += dy * Math.min(1, hit);
+    if (hit !== Infinity) {
+      if (hitPierre < hitSet) game.pierre.hurt(CONFIG.pin.damage, this.x - Math.sign(this.vx) * 100);
+      game.burst('BONK!', this.x, this.y, '#ffd600');
+      this.done = true;
+    }
+    if (this.t >= CONFIG.pin.life || this.x < -50 || this.x > CONFIG.panel.w + 50 || this.y < -50 || this.y > CONFIG.panel.h) this.done = true;
+  }
+  render(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y - this.h / 2);
+    ctx.rotate(this.t * 12);
+    drawSketch(ctx, pinParts(0, 0), 0, 0, 1);
+    ctx.restore();
+  }
+}
+
+class BalloonTwister extends Clown {
+  constructor(spec, surfaces) {
+    super(spec, surfaces);
+    this.twistTimer = CONFIG.clowns.balloonTwister.firstTwist;
+  }
+  act(dt, game) {
+    const c = CONFIG.clowns.balloonTwister, p = game.pierre;
+    this.facing = p.x < this.x ? -1 : 1;
+    if (Math.abs(p.x - this.x) < c.standOff) walkClown(this, -this.facing, c.speed, dt, game);
+    this.twistTimer -= dt;
+    const dogs = game.props.filter(p => p instanceof BalloonDog && p.owner === this && !p.done);
+    if (this.twistTimer <= 0 && dogs.length < c.maxDogs) {
+      game.props.push(new BalloonDog(this.x, this.y, this));
+      this.twistTimer = c.twistEvery;
+    }
+  }
+  parts() {
+    return [...performerParts(this, '#ffd600', '#e53935', [[-15, -80], [27, -80]]),
+      ...balloonDogParts(20, -86, '#ec407a')];
+  }
+}
+
+function balloonDogParts(x = 0, y = 0, color = '#ec407a') {
+  const balloon = (px, py, r, ry) => ({ shape: 'circle', x: x + px, y: y + py, r, ry, fill: color, shade: 0.15 });
+  return [balloon(-18, -20, 12, 5), balloon(-12, -9, 5, 11), balloon(12, -9, 5, 11),
+    balloon(0, -22, 17, 7), balloon(15, -30, 7, 12), balloon(11, -41, 4, 8),
+    balloon(21, -33, 10, 5), { shape: 'circle', x: x + 19, y: y - 35, r: 2, fill: INK, flat: true }];
+}
+
+class BalloonDog {
+  constructor(x, y, owner) {
+    Object.assign(this, { x, y, owner, w: CONFIG.balloonDog.w, h: CONFIG.balloonDog.h,
+      vy: 0, facing: -1, t: 0, active: true, done: false });
+  }
+  get box() { return boxOf(this); }
+  hurt(damage, fromX, game) {
+    if (this.done || damage <= 0) return;
+    this.done = true;
+    game.burst('POP!', this.x, this.y - 24, '#ec407a');
+  }
+  update(dt, game) {
+    if (this.done) return;
+    const c = CONFIG.balloonDog, p = game.pierre;
+    this.t += dt;
+    if (this.t >= c.life) { this.hurt(1, this.x, game); return; }
+    this.facing = p.x < this.x ? -1 : 1;
+    this.x += this.facing * Math.min(Math.abs(p.x - this.x), c.speed * dt);
+    const prevY = this.y;
+    this.vy += CONFIG.gravity * dt;
+    this.y += this.vy * dt;
+    landOn(this, prevY, game.surfaces);
+    this.x = Math.max(this.w / 2, Math.min(game.rightLimit() - this.w / 2, this.x));
+    if (boxesOverlap(this.box, p.box)) {
+      p.hurt(c.damage, this.x);
+      this.hurt(1, p.x, game);
+    }
+  }
+  render(ctx) {
+    drawSketch(ctx, balloonDogParts(0, Math.sin(this.t * 16) * 2), this.x, this.y, this.facing, 1, { lineWidth: 3 });
+  }
+}
+
+class ClownCar extends Clown {
+  constructor(spec, surfaces) {
+    super(spec, surfaces);
+    this.releaseTimer = CONFIG.clowns.clownCar.firstRelease;
+  }
+  act(dt, game) {
+    const c = CONFIG.clowns.clownCar;
+    this.releaseTimer -= dt;
+    const minis = game.clowns.filter(m => m.owner === this && !m.dead);
+    if (this.releaseTimer <= 0 && minis.length < c.maxMinis) {
+      const mini = new MiniClown({ type: 'miniClown', x: this.x }, game.surfaces);
+      mini.surface = this.surface;
+      mini.y = this.y;
+      mini.facing = game.pierre.x < this.x ? -1 : 1;
+      mini.x += mini.facing * (this.w / 2 + mini.w / 2);
+      walkClown(mini, 0, 0, 0, game);
+      mini.owner = this;
+      // These emerge fully drawn from the finished car; no second hand job.
+      game.spawnClown(mini);
+      this.say('BEEP BEEP!');
+      this.releaseTimer = c.releaseEvery;
+    }
+  }
+  parts() {
+    return [
+      { shape: 'circle', x: 0, y: -73, r: 21, fill: '#fff' },
+      { shape: 'circle', x: -20, y: -80, r: 10, fill: '#ff9800' },
+      { shape: 'circle', x: 18, y: -80, r: 10, fill: '#ff9800' },
+      { shape: 'line', pts: [[-2, -79], [5, -79]], lw: 3 },
+      { shape: 'circle', x: 13, y: -69, r: 7, fill: '#e53935', tag: 'nose' },
+      { shape: 'poly', pts: [[-53, -47], [-32, -53], [-25, -66], [29, -66], [39, -48], [53, -41], [53, -15], [-53, -15]], fill: '#e53935', dots: { color: '#ffd600', r: 4, gap: 18 } },
+      { shape: 'rect', x: -20, y: -62, w: 44, h: 19, fill: '#81d4fa' },
+      { shape: 'circle', x: -33, y: -17, r: 17, fill: INK },
+      { shape: 'circle', x: 33, y: -17, r: 17, fill: INK },
+      { shape: 'circle', x: -33, y: -17, r: 8, fill: '#ffd600' },
+      { shape: 'circle', x: 33, y: -17, r: 8, fill: '#ffd600' },
+      { shape: 'circle', x: 48, y: -37, r: 7, fill: '#fff176' },
+    ];
+  }
+}
+
+class MiniClown extends Clown {
+  act(dt, game) {
+    const c = CONFIG.clowns.miniClown;
+    this.facing = game.pierre.x < this.x ? -1 : 1;
+    walkClown(this, this.facing, c.speed, dt, game);
+    if (boxesOverlap(this.box, game.pierre.box)) game.pierre.hurt(c.contactDamage, this.x);
+  }
+  parts() {
+    return performerParts(this, '#43a047', '#ab47bc').map(p => {
+      const part = { ...p };
+      if (part.pts) part.pts = part.pts.map(([x, y]) => [x * 0.5, y * 0.5]);
+      for (const key of ['x', 'y', 'r', 'ry', 'w', 'h', 'lw']) if (part[key] !== undefined) part[key] *= 0.5;
+      return part;
+    });
+  }
 }
 
 // A cream pie in a tin, centered at (x, y).

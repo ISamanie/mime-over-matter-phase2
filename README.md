@@ -2,7 +2,22 @@
 
 A comic-book brawler-platformer played panel by panel. Pierre, a silent mime, is trapped in a comic full of clowns. The cartoonist's right hand draws clowns into each panel to stop him, and his left hand secretly draws sandwiches to help. The full design is in [SPEC.md](SPEC.md).
 
-## Handoff: where things stand (Wed 10/28/2026)
+## Handoff: where things stand (Sat 10/31/2026)
+
+The four remaining clown types are implemented (spec 5.4 / criterion 18), with a solo introduction each (criterion 48). The game now has **10 panels**: two original tutorial panels, four introductions, three mixed fights, then THE END. The full 18-panel, three-setting expansion remains unfinished.
+
+- **Seltzer Spritzer:** 3 health. Walks toward Pierre on its surface, then sprays at close range. Each short burst pushes once with strong knockback, does no health damage, and respects invincibility. Jumping over the spray avoids it.
+- **Juggler:** 3 health. Stands still juggling three pins, and throws a pin straight toward nearby Pierre on a cooldown. Pins damage once, hit risers/ground, and expire; swept collision prevents fast pins skipping targets.
+- **Balloon Twister:** 4 health. Backs away and twists up to two live dogs at a time. Dogs chase, fall onto lower surfaces, pop on contact or a beret/hammer hit, and eventually expire if stranded. The Twister replaces popped dogs while alive.
+- **Clown Car:** 9 health. Parks and releases one-hit mini clowns, up to three alive per car. Minis chase and hurt on contact. Smashing the car stops spawning; every surviving mini still counts toward the exit gate. Minis emerge fully drawn from the finished car. Any car panel automatically receives the crowded-panel hammer, even without a `crowded` flag.
+
+All four inherit drawing immunity, stagger, shouts, defeat and the nose gag. Tuning values are in `js/config.js`; props and spawned enemies reset between panels. Solo introductions are panels 3 (Spritzer), 4 (Juggler), 5 (Twister), and 6 (Car). Mixed fights follow in panels 7 to 9.
+
+Run both `node tests/smoke.js` and `node tests/clowns.js`. The focused suite reports each type separately and checks drawing, attacks, nose recovery, spawn limits/replenishment, gate accounting and combat progression through all panels to THE END. Progression tests give Pierre immunity to isolate progression from difficulty.
+
+Open `tests/preview.html` for browser playtesting. Buttons jump to each new type; normal controls still work. "Advance 1 second" steps the real simulation. Disable "Practice: no damage" to test pushes and damage. These inspection controls only appear on the test page.
+
+### Earlier handoff (Wed 10/28/2026)
 
 - **Built:** every [P1] criterion. The first version (spec sections 1 to 8) is a complete, winnable 6-panel game: walk, jump, attack, two clown types, the right hand drawing clowns, the left hand's sandwich rescue, Game Over and THE END.
 - **Since the first playtest:** a comic ink art style (spec 9.5), multi-level risers in every panel (criterion 40), the squeaky hammer, which the left hand draws at the start of the crowded panel 4 (criteria 27 and 29), a page-turn animation between panels (the camera zooms out to the whole comic page, a reading arrow points to the next panel, and the camera zooms into it), the beret slap in place of the punch, knocking clowns' noses off, and clowns' speech bubbles (criteria 13, 38, 49 and 50).
@@ -27,6 +42,7 @@ With [Node](https://nodejs.org) installed (any recent version, no packages), run
 
 ```
 node tests/smoke.js
+node tests/clowns.js
 ```
 
 It loads the real game scripts with a fake canvas and checks the core rules:
@@ -54,7 +70,7 @@ Not built yet: K (throw knife), P (pause), and the mime powers L, U and I (spec 
 
 ## Acceptance criteria
 
-Numbers match sections 6 and 9.7 of [SPEC.md](SPEC.md). Every [P1] criterion is met. Of the rest, the art style, multi-level panels, the hammer, the page view, the beret slap, the nose gag and the clowns' shouts are in.
+Numbers match sections 6 and 9.7 of [SPEC.md](SPEC.md). The original core criteria were met; the expanded panel-count criteria remain partial. The art style, multi-level panels, hammer, page view, beret slap, nose gag, shouts and all four extra clown types are in.
 
 | # | Pri | Status | Notes |
 |---|---|---|---|
@@ -75,18 +91,18 @@ Numbers match sections 6 and 9.7 of [SPEC.md](SPEC.md). Every [P1] criterion is 
 | 15 | P1 | Met | Unicyclist rides back and forth on its own ground or platform, turns at ledges, walls and the ink line, and hurts on contact. 2 punches. |
 | 16 | P1 | Met | Pie Tosser stays put, faces Pierre and lobs a pie in an arc at where he is every 2.6 seconds. 4 punches. Pies splat on Pierre, platforms or the ground. |
 | 17 | P1 | Met | A defeated clown is removed at once. |
-| 18 | P2 (was P3) | Not met | Seltzer Spritzer, Juggler, Balloon Twister and Clown Car are not built. |
+| 18 | P2 (was P3) | Met | All four implemented; see the separate reports in the current handoff above. |
 | 19 | P1 | Met | A thick wavy ink line blocks the right edge until every clown in the panel is defeated; then it disappears and a bobbing yellow arrow shows. |
 | 20 | P1 | Met | Walking off the right edge loads the next panel with Pierre on its left side. |
-| 21 | P1 | Met for 6 panels | Panels 1 to 5 have the clowns from the table in spec 5.2 (panel 1 shows the controls in a caption box). The HUD shows "Panel N / 6". Spec 9.6 now asks for 18 panels; see criterion 37. |
-| 22 | P1 | Met | Panel 6 shows "THE END"; R starts a new game. |
+| 21 | P1 | Partly met for expansion | Two tutorials, four solo introductions, then three mixed fights. The HUD shows "Panel N / 10"; the full 18-panel expansion remains. |
+| 22 | P1 | Partly met for expansion | Panel 10 shows "THE END"; R starts a new game. Moving THE END to panel 18 remains. |
 | 23 | P2 | Partly met | "THE END" is shown, but it isn't drawn in by a hand, and Pierre doesn't bow. |
 | 24 | P1 | Met | At 3 health or less, a second hand holding a crayon wobbles in and draws a sandwich in 1.2 seconds. It won't draw another while one is on screen, or within 10 seconds of the last. |
 | 25 | P1 | Met | Touching a finished sandwich restores 4 health, never above 10. |
 | 26 | P1 | Met | A sandwich being drawn can't be eaten. |
 | 27 | P2 | Met | Touching the hammer replaces the punch: J swings it for 3 damage (a punch does 1), with more reach and knockback, slower, and a "SQUEAK!" burst. It breaks after 10 swings, hit or miss ("CRACK!"). The HUD shows the swings left. Picking up another hammer resets the count. |
 | 28 | P2 | Not met | No knives. |
-| 29 | P2 | Met | In a `crowded: true` panel (panel 4), the left hand draws the hammer as soon as Pierre enters. It's finished about 0.6 seconds before the first clown. The item is always the hammer for now. |
+| 29 | P2 | Met | In crowded or car panels (6, 8 and 9), the left hand draws the hammer immediately, finishing before the first clown. The item is always the hammer for now. |
 | 30 | P2 | Not met | No random items. |
 | 31 | P2 (was P3) | Not met | No balloon sword, pogo stick or slinky. |
 | 32 | P3 | Not met | No Invisible Dog. |
@@ -94,10 +110,10 @@ Numbers match sections 6 and 9.7 of [SPEC.md](SPEC.md). Every [P1] criterion is 
 | 34 | P2 | Partly met | "SLAP!" on beret slaps, "SQUEAK!" on hammer hits, "POP!" when a nose comes off, and "CRACK!" when the hammer breaks. No "BONK!" when Pierre is hit. |
 | 35 | P2 | Not met | No pause. |
 | 36 | P3 | Not met | No sound. |
-| 37 | P2 | Not met | Still one page of 6 panels. |
+| 37 | P2 | Not met | Interim roster has one page of 10 panels; three pages remain pending. |
 | 38 | P2 | Partly met | Between every pair of panels, the camera zooms out to the whole page and back in (`js/page.js`). Cleared panels show as Pierre left them, and panels ahead are faded. There's only one page so far, so it never moves on to a second page. |
 | 39 | P2 | Partly met | Page 1's setting, the KlownKon convention hall, is built (`paintConventionHall` in `js/render.js`). No backstage or big top yet. |
-| 40 | P2 | Met for panels 1 to 5 | Each fighting panel has 2 to 4 risers in a different layout: a climb, a hill, a staircase, a crowded tower, a valley. The smoke test checks every riser can be reached. |
+| 40 | P2 | Met for panels 1 to 9 | Multiple risers and distinct neighboring layouts; the smoke test checks every riser can be reached. |
 | 41 | P2 | Not met | No solid obstacles or hazards. Platforms are one-way. |
 | 42 | P2 | Not met | No combo. |
 | 43 | P2 | Not met | No jump kick. |
@@ -105,7 +121,7 @@ Numbers match sections 6 and 9.7 of [SPEC.md](SPEC.md). Every [P1] criterion is 
 | 45 | P2 | Not met | No Invisible Wall. |
 | 46 | P2 | Not met | No Invisible Rope. |
 | 47 | P2 | Not met | No Invisible Box. |
-| 48 | P3 | Not met | Only two clown types so far. |
+| 48 | P3 | Met | Each new type debuts alone in panels 3 to 6 before the mixed fights in panels 7 to 9. |
 | 49 | P2 | Met | Pierre whips off his beret and swings it in an arc from behind his head, with speed lines, while his bald head (three hairs) shows. The hit lands 0.1 seconds into the swing. While he holds the hammer, J swings that instead. |
 | 50 | P2 | Met | A hit that doesn't defeat a clown has a 35% chance (`CONFIG.clowns.noseChance`) to pop its nose off. The nose bounces. The clown stops attacking, raises its arms, shakes, sweats, says "MY NOSE!", and goes after it on its own platform. It puts the nose back with a "HONK!", or says "GRR!" and fights on without it if the nose landed somewhere it can't reach within 5 seconds. |
 
@@ -116,17 +132,19 @@ Numbers match sections 6 and 9.7 of [SPEC.md](SPEC.md). Every [P1] criterion is 
 | File | What's in it |
 |---|---|
 | `js/config.js` | `CONFIG`: every tuning value (speeds, health, damage, draw times, cooldowns, sizes). Change numbers here. |
-| `js/panels.js` | `PANELS`: the six panels as data: platforms, which clowns stand where (in drawing order), the `crowded` flag and caption text. |
+| `js/panels.js` | `PANELS`: the ten panels as data: platforms, clowns in drawing order, solo introductions, the `crowded` flag and captions. |
 | `js/page.js` | The page turn between panels: `pageSlot` (where each panel sits on the page), `drawComicPage` (the whole page, with the reading arrow) and `drawPageTurn` (the zoom out, hold and zoom in, timed by `CONFIG.pageTurn`). |
 | `js/render.js` | The comic look: paper gutters, the brush panel border, the KlownKon convention-hall background (drawn once per panel and cached), stage-riser platforms, caption boxes, shadows, "POW!" bursts, ink-line gate, exit arrow, "CANCELLED!", "THE END" and the HUD. |
 | `js/drawing.js` | The ink style and the shared "being drawn" system both hands use. Things are lists of shapes ("parts"); `limb` makes tapered arms and legs. `drawSketch` inks them with brush outlines, cel shadows, hatching, stripes and dots, finished or partly drawn. `penPoint` says where the pen tip is, and `DrawJob` runs one drawing and makes the thing `active` when it's done. |
 | `js/physics.js` | Surfaces (ground plus platforms), landing on them, and box overlap tests. |
 | `js/pierre.js` | `Pierre`: input, movement, jumping, attacking (`punch` starts a swing, `strike` lands it: a beret slap, or the held hammer), getting hurt, healing, and his parts, posed from joint positions for walking, slapping, jumping and getting hit. |
-| `js/clowns.js` | `Clown` base class (getting hit, shouting, knocking its nose off, chasing it), `Unicyclist`, `PieTosser`, `Nose`, `Pie`, and `makeClown(spec)`, which turns a panel entry into a clown. A clown's nose is the part tagged `tag: 'nose'`. |
+| `js/clowns.js` | `Clown` base class, six clown types, mini clowns, seltzer bursts, bowling pins, balloon dogs, noses, pies and `makeClown(spec)`. A clown's nose is tagged `tag: 'nose'`. |
 | `js/items.js` | `Item` (the shared base: drawn by the left hand, picked up by touch once finished), `Sandwich`, `Hammer`, and `hammerParts`, which both the hammer on the floor and the one in Pierre's hand use. A new item subclasses `Item` and defines `pickUp(pierre)` and `parts()`. |
 | `js/hands.js` | `Hand`, one class for both hands: queue things, fly in, draw each with a `DrawJob`, leave. `handParts` is the hand holding a pen or crayon, as inked parts. |
 | `js/main.js` | Keyboard input (`Input`, `KEYS`), the `Game` object (states `play`, `pageTurn`, `gameover` and `end`; loading panels; `nextPanel`, which snapshots panels for the page view; the gate; the sandwich rescue and where to put it; update and render order), and the frame loop. `drawPanelContents` draws everything inside the panel, for both the live screen and snapshots. |
 | `tests/smoke.js` | The Node smoke test (see [Tests](#tests)). |
+| `tests/clowns.js` | Focused acceptance tests for each extra clown and combat progression to THE END. |
+| `tests/preview.html` | Browser playtest page with introduction selection, practice mode and frame stepping. |
 
 **How a panel runs:**
 1. `Game.loadPanel` queues each clown from `PANELS` with the right hand.
@@ -137,7 +155,7 @@ Numbers match sections 6 and 9.7 of [SPEC.md](SPEC.md). Every [P1] criterion is 
 **Adding a clown or item:** give it `x`, `y`, `facing`, `parts()`, `update` and `render`, then pass it to a hand's `draw(thing, onStart)`.
 
 **Testing from the browser console:** `Game` is a global.
-- `Game.loadPanel(3)` jumps to panel 4.
+- `Game.loadPanel(2)` jumps to the Spritzer introduction; indexes 3, 4 and 5 introduce Juggler, Twister and Car.
 - `Game.pierre.health = 3` triggers the sandwich rescue.
 - `Game.clowns.forEach(c => c.hurt(99, 0, Game))` defeats every finished clown.
 
@@ -157,7 +175,7 @@ In the order of spec 9.8, with where each one goes in the code:
    - Knives: a `Knives` subclass of `Item` whose `pickUp` adds to a `pierre.knives` count. Add K to `KEYS`, a `Knife` projectile shaped like `Pie` in `js/clowns.js`, and the count to `drawHUD`.
    - Random items: roll about 1 in 3 per fighting panel in `Game.loadPanel` and schedule a left-hand draw at a random time. Mostly sandwiches, sometimes a hammer or knives. The crowded-panel draw in `loadPanel` could then pick a random non-sandwich item too.
    - Spec 5.7 (hurting the right hand with the hammer) now has the hammer it needs.
-4. **Extra clowns (18), one new type per panel at first (48).** Subclass `Clown` in `js/clowns.js` and add the type to `makeClown`. Each clown needs `parts()` (built with `limb` and the patterns in `js/drawing.js`) and `act(dt, game)`.
+4. **Extra clowns (18, 48): done.** Keep the solo introductions before mixed encounters when distributing panels across the planned three pages. Tune difficulty after playtesting.
 5. **Pages 2 and 3 (37 to 39).**
    - Turn `PANELS` into a list of pages and show "Page P · Panel N" in `drawHUD`.
    - Add `paintBackstage` and `paintBigTop` beside `paintConventionHall`, picked by a `setting` field on each page.
@@ -177,7 +195,7 @@ In the order of spec 9.8, with where each one goes in the code:
 - The hands can run past the edge of the canvas. When the right hand draws a clown near the right edge, its sleeve covers "Panel N / 6" in the HUD for a moment.
 - If Pierre leaves a panel while the left hand is still drawing a sandwich, the sandwich is lost and the 10-second cooldown still applies.
 - Pies already in the air keep flying after the last clown is defeated and can still hit Pierre.
-- Difficulty is untuned. Since the art test, Pierre's hitbox is larger (40 × 124), so pies hit him more easily, and the crowded panel 4 is hard. Tune `CONFIG.pie.damage`, `CONFIG.clowns.pieTosser.throwEvery` and `CONFIG.sandwich` together.
+- Difficulty is untuned. Pierre's hitbox is large (40 × 124), and the mixed fights in panels 7 to 9 need further playtesting. Tune `CONFIG.clowns`, `CONFIG.pie` and `CONFIG.sandwich` together. Automated progression checks use damage immunity and don't measure combat difficulty.
 - The multi-level panels, the hammer, the page turn, the beret slap and the nose gag have been checked by the smoke test and in Chrome screenshots, but not yet played through by hand.
 - A clown that gives up on its nose leaves the nose lying where it landed for the rest of the panel. Clowns can't jump between platforms, so a nose that falls off a clown's platform is always out of its reach.
 

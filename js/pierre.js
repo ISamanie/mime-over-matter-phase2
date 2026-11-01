@@ -91,8 +91,9 @@ class Pierre {
       top: this.y - this.h + 8,
       bottom: this.y - 16,
     };
-    for (const clown of game.clowns) {
-      if (clown.active && boxesOverlap(reach, clown.box)) {
+    const targets = [...game.clowns, ...game.props.filter(p => p instanceof BalloonDog)];
+    for (const clown of targets) {
+      if (clown.active && !clown.dead && !clown.done && boxesOverlap(reach, clown.box)) {
         const y = clown.y - clown.h * 0.6;
         if (hammer) {
           clown.hurt(hammer.damage, this.x, game, hammer.push);

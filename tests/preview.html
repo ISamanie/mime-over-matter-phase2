@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Clown acceptance playtest — Mime Over Matter</title>
+<style>
+  body { margin: 0; background: #272421; color: #fff2cb; font: 16px system-ui; text-align: center; }
+  nav { padding: 12px; }
+  button, label { margin: 4px; padding: 8px 12px; }
+  button { cursor: pointer; border: 2px solid #161616; background: #ffe873; font: bold 15px system-ui; }
+  canvas { width: min(960px, 100vw); display: block; margin: auto; }
+  p { margin: 6px; }
+</style>
+<nav aria-label="Playtest controls">
+  <button data-type="seltzerSpritzer">Seltzer Spritzer</button>
+  <button data-type="juggler">Juggler</button>
+  <button data-type="balloonTwister">Balloon Twister</button>
+  <button data-type="clownCar">Clown Car</button>
+  <button id="clear">Clear panel</button>
+  <button id="restart">Restart game</button>
+  <button id="step">Advance 1 second</button>
+  <label><input id="practice" type="checkbox" checked>Practice: no damage</label>
+</nav>
+<p>Arrows / A / D: walk · Space: jump · J: beret slap. Click a type to play its solo introduction.</p>
+<p id="status" aria-live="polite"></p>
+<canvas id="game" width="960" height="640" tabindex="0" aria-label="Clown playtest"></canvas>
+<script src="../js/config.js"></script>
+<script src="../js/panels.js"></script>
+<script src="../js/render.js"></script>
+<script src="../js/page.js"></script>
+<script src="../js/drawing.js"></script>
+<script src="../js/physics.js"></script>
+<script src="../js/pierre.js"></script>
+<script src="../js/clowns.js"></script>
+<script src="../js/items.js"></script>
+<script src="../js/hands.js"></script>
+<script src="../js/main.js"></script>
+<script>
+  const practice = document.getElementById('practice');
+  function showStatus() {
+    document.getElementById('status').textContent = `Panel ${Game.panelIndex + 1}: ${Game.state}; hand ${Game.rightHand.state}; clowns ${Game.clowns.length}; props ${Game.props.length}`;
+  }
+  function setPractice() {
+    if (practice.checked) Game.pierre.hurt = () => false;
+    else delete Game.pierre.hurt;
+  }
+  function focusGame() { document.getElementById('game').focus(); }
+  for (const button of document.querySelectorAll('[data-type]')) {
+    button.addEventListener('click', () => {
+      Game.restart();
+      Game.loadPanel(PANELS.findIndex(p => p.clowns.some(c => c.type === button.dataset.type)));
+      setPractice(); focusGame(); showStatus();
+    });
+  }
+  document.getElementById('clear').onclick = () => {
+    Game.clowns.forEach(c => c.hurt(99, Game.pierre.x, Game));
+    focusGame();
+  };
+  document.getElementById('restart').onclick = () => { Game.restart(); setPractice(); focusGame(); };
+  document.getElementById('step').onclick = () => {
+    for (let i = 0; i < 60; i++) Game.update(1 / 60);
+    Game.render(); showStatus(); focusGame();
+  };
+  practice.onchange = setPractice;
+  setPractice();
+  showStatus();
+</script>
+</html>

@@ -14,7 +14,9 @@ const PAGE_GAP = 24;
 function pageSlot(i) {
   const { w, h } = CONFIG.panel;
   const rows = Math.ceil(PANELS.length / PAGE_COLUMNS);
-  const sw = 270, sh = (sw * h) / w;
+  // Fit the interim roster's extra introduction panels on the page too.
+  const sw = Math.min(270, (CONFIG.canvas.height - 150 - (rows - 1) * PAGE_GAP) / rows * w / h);
+  const sh = (sw * h) / w;
   const left = (CONFIG.canvas.width - (PAGE_COLUMNS * sw + (PAGE_COLUMNS - 1) * PAGE_GAP)) / 2;
   const top = (CONFIG.canvas.height - (rows * sh + (rows - 1) * PAGE_GAP)) / 2 + 30;
   const col = i % PAGE_COLUMNS, row = Math.floor(i / PAGE_COLUMNS);

@@ -62,11 +62,11 @@ get('CONFIG.clowns.noseChance = 0');
 
 // --- Panel data ---
 const panels = get('PANELS');
-check('6 panels, the last one is THE END', panels.length === 6 && panels[5].theEnd);
-const counts = panels.slice(0, 5).map(p => p.clowns.length).join(',');
-check(`clown counts match spec 5.2 (got ${counts})`, counts === '1,2,3,5,4');
+check('10 panels including four solo introductions, the last is THE END', panels.length === 10 && panels[9].theEnd);
+const counts = panels.slice(0, -1).map(p => p.clowns.length).join(',');
+check(`clown counts include solo debuts before mixed acts (got ${counts})`, counts === '1,2,1,1,1,1,3,5,4');
 check('every fighting panel has at least two heights (criterion 40)',
-  panels.slice(0, 5).every(p => p.platforms.length >= 1));
+  panels.slice(0, -1).every(p => p.platforms.length >= 1));
 
 // Every platform can be reached by jumping up from the ground or another
 // platform: at most 125 px up, and at most 110 px of gap across.
@@ -151,7 +151,7 @@ run(2);
 check('no second sandwich during the cooldown', get('Game.items.length') === 0 && !get('Game.leftHand.busy'));
 
 // --- The squeaky hammer, drawn first in the crowded panel ---
-get('Game.loadPanel(3); Game.pierre.hurt = () => false');
+get('Game.loadPanel(7); Game.pierre.hurt = () => false');
 run(1.0);
 check('crowded panel: the left hand draws the hammer', get('Game.items.length === 1 && Game.items[0].kind === "hammer"'));
 get('Game.pierre.x = Game.items[0].x; Game.pierre.y = Game.items[0].y; Game.pierre.vy = 0');
@@ -181,11 +181,11 @@ check('R restarts at panel 1 with full health and no items',
   get('Game.state') === 'play' && get('Game.panelIndex') === 0 && get('Game.pierre.health') === 10 && get('Game.pierre.held') === null);
 
 // --- THE END ---
-get('Game.loadPanel(4); Game.pierre.hurt = () => false');
+get('Game.loadPanel(PANELS.length - 2); Game.pierre.hurt = () => false');
 run(14);
 get('Game.clowns.forEach(c => c.hurt(99, 0, Game))');
 key('keydown', 'ArrowRight'); run(8); key('keyup', 'ArrowRight');
-check('clearing panel 5 reaches THE END', get('Game.state') === 'end' && get('Game.panelIndex') === 5);
+check('clearing the final fight reaches THE END', get('Game.state') === 'end' && get('Game.panelIndex') === panels.length - 1);
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

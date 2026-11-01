@@ -53,9 +53,11 @@ const Game = {
     this.clowns = [];
     this.items = [];
     this.pies = [];
+    this.props = [];  // seltzer bursts, straight pins and poppable balloon dogs
     this.noses = [];
     this.effects = [];
     this.defeated = 0;
+    this.totalClowns = this.panel.clowns.length;
     this.pierre.placeAtStart();
 
     // The right hand draws this panel's clowns, one at a time, in order.
@@ -67,7 +69,7 @@ const Game = {
     // A crowded panel: the left hand draws the hammer at once. It draws
     // faster and starts sooner, so the hammer is ready before the first
     // clown (spec 5.5).
-    if (this.panel.crowded) {
+    if (this.panel.crowded || this.panel.clowns.some(c => c.type === 'clownCar')) {
       const spot = this.spotForItem();
       this.leftHand.draw(new Hammer(spot.x, spot.y), item => this.items.push(item));
     }
@@ -111,9 +113,16 @@ const Game = {
     this.defeated++;
   },
 
+  spawnClown(clown) {
+    clown.active = true;
+    clown.drawProgress = 1;
+    this.totalClowns++;
+    this.clowns.push(clown);
+  },
+
   // The ink line goes once every clown in the panel is defeated.
   get gateOpen() {
-    return !this.panel.theEnd && this.defeated >= this.panel.clowns.length;
+    return !this.panel.theEnd && this.defeated >= this.totalClowns;
   },
 
   // How far right Pierre can go: the ink line, or off the edge once it's
@@ -168,8 +177,11 @@ const Game = {
     this.helpIfLosing(dt);
     for (const i of this.items) if (i.active) i.update(dt, this);
     this.items = this.items.filter(i => !i.taken);
-    for (const c of this.clowns) if (c.active) c.update(dt, this);
+    // Newly released minis begin acting next frame, after their entrance.
+    for (const c of [...this.clowns]) if (c.active && !c.dead) c.update(dt, this);
     this.clowns = this.clowns.filter(c => !c.dead);
+    for (const p of this.props) if (!p.done) p.update(dt, this);
+    this.props = this.props.filter(p => !p.done);
     for (const p of this.pies) p.update(dt, this);
     this.pies = this.pies.filter(p => !p.done);
     for (const n of this.noses) n.update(dt, this);
@@ -228,6 +240,7 @@ const Game = {
     for (const i of this.items) i.render(ctx);
     for (const c of this.clowns) c.render(ctx);
     for (const p of this.pies) p.render(ctx);
+    for (const p of this.props) p.render(ctx);
     for (const n of this.noses) n.render(ctx);
     this.pierre.render(ctx);
     for (const e of this.effects) drawBurst(ctx, e);

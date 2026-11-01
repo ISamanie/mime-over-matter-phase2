@@ -1,4 +1,4 @@
-// The page's six panels, as data (spec 5.2 and section 8), so panels can be
+// The panels, as data (spec 5.2 and section 8), so panels can be
 // added or rebalanced without touching game code.
 //
 // Positions are in panel coordinates: the panel is CONFIG.panel.w wide, and
@@ -18,7 +18,7 @@ const PANELS = [
     clowns: [{ type: 'unicyclist', x: 720 }],
     caption: [
       'Meanwhile, at KlownKon...',
-      'Arrows or A / D: walk.  Space, W or Up: jump.  J: punch.',
+      'Arrows or A / D: walk.  Space, W or Up: jump.  J: slap.',
       'Beat every clown to wipe away the ink line on the right.',
     ],
   },
@@ -31,12 +31,34 @@ const PANELS = [
     ],
   },
   {
-    // A staircase up to the right, Pie Tossers on the two top steps.
+    // Solo introductions before mixing any new act (spec 9.2 / 48).
+    platforms: [{ x: 240, y: 365, w: 160 }, { x: 490, y: 270, w: 170 }],
+    clowns: [{ type: 'seltzerSpritzer', x: 650 }],
+    caption: ['Seltzer Spritzer!', 'Get close for a slap, or jump over the spray.'],
+  },
+  {
+    platforms: [{ x: 160, y: 370, w: 150 }, { x: 380, y: 280, w: 150 }, { x: 620, y: 370, w: 170 }],
+    clowns: [{ type: 'juggler', x: 690, on: 2 }],
+    caption: ['Juggler!', 'Those pins fly straight. Jump or use the risers as cover.'],
+  },
+  {
+    platforms: [{ x: 180, y: 365, w: 180 }, { x: 440, y: 270, w: 170 }],
+    clowns: [{ type: 'balloonTwister', x: 660 }],
+    caption: ['Balloon Twister!', 'Slap the chasing dogs to pop them. Catch their maker!'],
+  },
+  {
+    crowded: true,
+    platforms: [{ x: 150, y: 370, w: 150 }, { x: 370, y: 275, w: 180 }, { x: 650, y: 375, w: 160 }],
+    clowns: [{ type: 'clownCar', x: 690 }],
+    caption: ['Clown Car!', 'Smash the car to stop the minis. Then clear the stragglers.'],
+  },
+  {
+    // Mixed acts, after their solo debuts. A staircase up to the right.
     platforms: [{ x: 120, y: 370, w: 130 }, { x: 320, y: 280, w: 140 }, { x: 540, y: 190, w: 150 }, { x: 740, y: 330, w: 130 }],
     clowns: [
-      { type: 'pieTosser', x: 390, on: 1 },
+      { type: 'juggler', x: 390, on: 1 },
       { type: 'pieTosser', x: 615, on: 2 },
-      { type: 'unicyclist', x: 560 },
+      { type: 'seltzerSpritzer', x: 560 },
     ],
   },
   {
@@ -45,24 +67,24 @@ const PANELS = [
     platforms: [{ x: 120, y: 360, w: 160 }, { x: 350, y: 260, w: 140 }, { x: 560, y: 180, w: 130 }, { x: 720, y: 350, w: 150 }],
     clowns: [
       { type: 'pieTosser', x: 625, on: 2 },
-      { type: 'unicyclist', x: 450 },
+      { type: 'balloonTwister', x: 450 },
       { type: 'pieTosser', x: 830 },
       { type: 'unicyclist', x: 200, on: 0 },
-      { type: 'unicyclist', x: 795, on: 3 },
+      { type: 'juggler', x: 795, on: 3 },
     ],
   },
   {
     // A valley: high ground on both sides, Pie Tossers up top.
     platforms: [{ x: 110, y: 280, w: 150 }, { x: 300, y: 370, w: 140 }, { x: 500, y: 370, w: 140 }, { x: 690, y: 270, w: 160 }],
     clowns: [
-      { type: 'unicyclist', x: 470 },
+      { type: 'clownCar', x: 470 },
       { type: 'pieTosser', x: 185, on: 0 },
       { type: 'unicyclist', x: 570, on: 2 },
-      { type: 'pieTosser', x: 770, on: 3 },
+      { type: 'balloonTwister', x: 770, on: 3 },
     ],
   },
   {
-    // Panel 6: THE END. No clowns.
+    // THE END. No clowns. The three-page expansion is still separate work.
     theEnd: true,
     platforms: [],
     clowns: [],

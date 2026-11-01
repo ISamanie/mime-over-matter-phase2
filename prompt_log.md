@@ -195,3 +195,13 @@ ok keep doing small cycles of knocking things off the P2 list etc and checking w
 we are out of time, write your final commit to github, ensuring everything is well documented and ready for handoff
 ```
 **What came back:** a last pass over the README (stale lines fixed, the next cycle noted in the handoff section) and this log. Everything is in the final commit.
+
+### Prompt 19 (Sat 10/31/2026)
+```
+read the read me and implement the remaining clown types, make sure to test them and follow sepc
+```
+**What came back:**
+- Implemented Seltzer Spritzer, Juggler, Balloon Twister and Clown Car from spec 5.4, with shared drawing immunity, nose panic and defeat behavior.
+- Added four solo introductions before mixed fights (criterion 48), making an interim 10-panel game; the full 18-panel expansion remains pending.
+- Added seltzer knockback, straight pins with swept collision, poppable chasing dogs, mini-clown spawning and dynamic exit-gate counts. Car panels automatically receive the crowded-panel hammer.
+- Added focused Node acceptance tests and a separate browser playtest page; updated the smoke test and handoff documentation.

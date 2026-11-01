@@ -28,16 +28,25 @@ const CONFIG = {
   clowns: {
     unicyclist: { w: 50, h: 150, health: 2, speed: 150, contactDamage: 1 },
     pieTosser: { w: 60, h: 150, health: 4, throwEvery: 2.6, firstThrow: 0.5, windup: 0.5 },
+    seltzerSpritzer: { w: 54, h: 144, health: 3, speed: 85, range: 145, sprayEvery: 2.2, windup: 0.55 },
+    juggler: { w: 54, h: 145, health: 3, range: 350, throwEvery: 1.8, windup: 0.5 },
+    balloonTwister: { w: 56, h: 145, health: 4, standOff: 230, speed: 55, twistEvery: 3.2, firstTwist: 1.2, maxDogs: 2 },
+    clownCar: { w: 110, h: 105, health: 9, releaseEvery: 3.0, firstRelease: 1.0, maxMinis: 3 },
+    miniClown: { w: 30, h: 70, health: 1, speed: 120, contactDamage: 1 },
     hitFlash: 0.2,         // a hit clown flickers for this long
     hitStun: 0.25,         // and stops moving for this long
     hitPush: 12,           // and gets pushed back this far
     noseChance: 0.35,      // chance a hit that doesn't defeat a clown knocks its nose off
     noseGiveUp: 5,         // a clown that can't reach its nose gives up after this long
-    chaseSpeed: { unicyclist: 220, pieTosser: 120 },   // scrambling after a lost nose
+    chaseSpeed: { unicyclist: 220, pieTosser: 120, seltzerSpritzer: 160, juggler: 140,
+      balloonTwister: 150, clownCar: 90, miniClown: 180 },
     shouts: ['HONK!', 'HAW HAW!', 'NICE FACE PAINT!', 'SAY SOMETHING!'],
     bubbleTime: 1.4,       // how long a speech bubble stays up
   },
   nose: { r: 7, bounce: 0.45, launchUp: 480, launchSide: [80, 160] },
+  seltzer: { duration: 0.45, push: 440, lift: 90, w: 145, h: 48 },
+  pin: { speed: 390, damage: 1, w: 28, h: 18, life: 3 },
+  balloonDog: { w: 46, h: 42, speed: 135, damage: 1, life: 9 },
   pie: {
     w: 30, h: 14,
     damage: 1,
